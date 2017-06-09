@@ -1,4 +1,4 @@
-PROJECT_NAME     := blinky_sitara
+PROJECT_NAME     := experimental_ble_app_blinky_sitara_s140
 TARGETS          := nrf52840_xxaa
 OUTPUT_DIRECTORY := _build
 
@@ -6,13 +6,13 @@ SDK_ROOT := ../../SDK
 PROJ_DIR := ./
 
 $(OUTPUT_DIRECTORY)/nrf52840_xxaa.out: \
-  LINKER_SCRIPT  := blinky_gcc_nrf52.ld
+  LINKER_SCRIPT  := experimental_ble_app_blinky_gcc_nrf52.ld
 
 # Source files common to all targets
 SRC_FILES += \
   $(SDK_ROOT)/components/libraries/log/src/nrf_log_backend_serial.c \
   $(SDK_ROOT)/components/libraries/log/src/nrf_log_frontend.c \
-  $(SDK_ROOT)/components/boards/boards.c \
+  $(SDK_ROOT)/components/libraries/button/app_button.c \
   $(SDK_ROOT)/components/libraries/util/app_error.c \
   $(SDK_ROOT)/components/libraries/util/app_error_weak.c \
   $(SDK_ROOT)/components/libraries/scheduler/app_scheduler.c \
@@ -21,17 +21,23 @@ SRC_FILES += \
   $(SDK_ROOT)/components/libraries/hardfault/hardfault_implementation.c \
   $(SDK_ROOT)/components/libraries/util/nrf_assert.c \
   $(SDK_ROOT)/components/libraries/strerror/nrf_strerror.c \
+  $(SDK_ROOT)/components/boards/boards.c \
   $(SDK_ROOT)/components/drivers_nrf/clock/nrf_drv_clock.c \
   $(SDK_ROOT)/components/drivers_nrf/common/nrf_drv_common.c \
+  $(SDK_ROOT)/components/drivers_nrf/gpiote/nrf_drv_gpiote.c \
   $(SDK_ROOT)/components/drivers_nrf/uart/nrf_drv_uart.c \
-  $(SDK_ROOT)/components/drivers_nrf/nrf_soc_nosd/nrf_nvic.c \
-  $(SDK_ROOT)/components/drivers_nrf/nrf_soc_nosd/nrf_soc.c \
   $(PROJ_DIR)/main.c \
   $(SDK_ROOT)/external/segger_rtt/RTT_Syscalls_GCC.c \
   $(SDK_ROOT)/external/segger_rtt/SEGGER_RTT.c \
   $(SDK_ROOT)/external/segger_rtt/SEGGER_RTT_printf.c \
+  $(SDK_ROOT)/components/ble/common/ble_advdata.c \
+  $(SDK_ROOT)/components/ble/common/ble_conn_params.c \
+  $(SDK_ROOT)/components/ble/common/ble_srv_common.c \
+  $(SDK_ROOT)/components/ble/nrf_ble_gatt/nrf_ble_gatt.c \
   $(SDK_ROOT)/components/toolchain/gcc/gcc_startup_nrf52840.S \
   $(SDK_ROOT)/components/toolchain/system_nrf52840.c \
+  $(SDK_ROOT)/components/ble/ble_services/ble_lbs/ble_lbs.c \
+  $(SDK_ROOT)/components/softdevice/common/softdevice_handler/softdevice_handler.c \
 
 # Include folders common to all targets
 INC_FOLDERS += \
@@ -48,10 +54,8 @@ INC_FOLDERS += \
   $(SDK_ROOT)/components/ble/ble_services/ble_gls \
   $(SDK_ROOT)/components/libraries/fstorage \
   $(SDK_ROOT)/components/drivers_nrf/i2s \
-  $(PROJ_DIR) \
   $(SDK_ROOT)/components/libraries/gpiote \
   $(SDK_ROOT)/components/drivers_nrf/gpiote \
-  $(SDK_ROOT)/components/drivers_nrf/nrf_soc_nosd \
   $(SDK_ROOT)/components/boards \
   $(SDK_ROOT)/components/drivers_nrf/common \
   $(SDK_ROOT)/components/ble/ble_advertising \
@@ -62,14 +66,14 @@ INC_FOLDERS += \
   $(SDK_ROOT)/components/toolchain/cmsis/include \
   $(SDK_ROOT)/components/ble/ble_services/ble_rscs_c \
   $(SDK_ROOT)/components/drivers_nrf/uart \
-  $(SDK_ROOT)/components/libraries/usbd/class/hid/kbd \
+  $(SDK_ROOT)/components/ble/common \
   $(SDK_ROOT)/components/ble/ble_services/ble_lls \
   $(SDK_ROOT)/components/drivers_nrf/wdt \
-  $(SDK_ROOT)/components/libraries/bsp \
   $(SDK_ROOT)/components/ble/ble_services/ble_bas \
   $(SDK_ROOT)/components/libraries/experimental_section_vars \
   $(SDK_ROOT)/components/ble/ble_services/ble_ans_c \
   $(SDK_ROOT)/components/libraries/slip \
+  $(SDK_ROOT)/components/libraries/mem_manager \
   $(SDK_ROOT)/external/segger_rtt \
   $(SDK_ROOT)/components/libraries/csense_drv \
   $(SDK_ROOT)/components/drivers_nrf/hal \
@@ -82,7 +86,6 @@ INC_FOLDERS += \
   $(SDK_ROOT)/components/ble/ble_services/ble_dfu \
   $(SDK_ROOT)/components/drivers_nrf/twis_slave \
   $(SDK_ROOT)/components \
-  $(SDK_ROOT)/components/drivers_nrf/usbd \
   $(SDK_ROOT)/components/libraries/scheduler \
   $(SDK_ROOT)/components/ble/ble_services/ble_lbs \
   $(SDK_ROOT)/components/ble/ble_services/ble_hts \
@@ -100,9 +103,11 @@ INC_FOLDERS += \
   $(SDK_ROOT)/components/ble/ble_services/ble_cscs \
   $(SDK_ROOT)/components/libraries/uart \
   $(SDK_ROOT)/components/libraries/hci \
+  $(SDK_ROOT)/components/libraries/usbd/class/hid/kbd \
   $(SDK_ROOT)/components/drivers_nrf/spi_slave \
   $(SDK_ROOT)/components/drivers_nrf/lpcomp \
   $(SDK_ROOT)/components/libraries/timer \
+  $(SDK_ROOT)/components/softdevice/s140/headers \
   $(SDK_ROOT)/components/drivers_nrf/power \
   $(SDK_ROOT)/components/libraries/usbd/config \
   $(SDK_ROOT)/components/toolchain \
@@ -116,11 +121,13 @@ INC_FOLDERS += \
   $(SDK_ROOT)/components/drivers_nrf/pdm \
   $(SDK_ROOT)/components/libraries/crc32 \
   $(SDK_ROOT)/components/libraries/usbd/class/audio \
+  $(SDK_ROOT)/components/softdevice/s140/headers/nrf52 \
   $(SDK_ROOT)/components/ble/peer_manager \
-  $(SDK_ROOT)/components/libraries/mem_manager \
+  $(SDK_ROOT)/components/drivers_nrf/swi \
   $(SDK_ROOT)/components/ble/ble_services/ble_tps \
   $(SDK_ROOT)/components/ble/ble_services/ble_dis \
   $(SDK_ROOT)/components/device \
+  $(SDK_ROOT)/components/ble/nrf_ble_gatt \
   $(SDK_ROOT)/components/ble/nrf_ble_qwr \
   $(SDK_ROOT)/components/libraries/button \
   $(SDK_ROOT)/components/libraries/usbd \
@@ -132,7 +139,8 @@ INC_FOLDERS += \
   $(SDK_ROOT)/components/libraries/twi \
   $(SDK_ROOT)/components/drivers_nrf/clock \
   $(SDK_ROOT)/components/ble/ble_services/ble_rscs \
-  $(SDK_ROOT)/components/drivers_nrf/swi \
+  $(SDK_ROOT)/components/drivers_nrf/usbd \
+  $(SDK_ROOT)/components/softdevice/common/softdevice_handler \
   $(SDK_ROOT)/components/ble/ble_services/ble_hrs \
   $(SDK_ROOT)/components/libraries/log/src \
 
@@ -140,10 +148,13 @@ INC_FOLDERS += \
 LIB_FILES += \
 
 # C flags common to all targets
+CFLAGS += -DBLE_STACK_SUPPORT_REQD
 CFLAGS += -DBOARD_SITARA
-CFLAGS += -DBSP_DEFINES_ONLY
 CFLAGS += -DCONFIG_GPIO_AS_PINRESET
 CFLAGS += -DNRF52840_XXAA
+CFLAGS += -DNRF_SD_BLE_API_VERSION=5
+CFLAGS += -DS140
+CFLAGS += -DSOFTDEVICE_PRESENT
 CFLAGS += -DSWI_DISABLE0
 CFLAGS += -mcpu=cortex-m4
 CFLAGS += -mthumb -mabi=aapcs
@@ -158,10 +169,13 @@ CXXFLAGS += \
 
 # Assembler flags common to all targets
 ASMFLAGS += -x assembler-with-cpp
+ASMFLAGS += -DBLE_STACK_SUPPORT_REQD
 ASMFLAGS += -DBOARD_SITARA
-ASMFLAGS += -DBSP_DEFINES_ONLY
 ASMFLAGS += -DCONFIG_GPIO_AS_PINRESET
 ASMFLAGS += -DNRF52840_XXAA
+ASMFLAGS += -DNRF_SD_BLE_API_VERSION=5
+ASMFLAGS += -DS140
+ASMFLAGS += -DSOFTDEVICE_PRESENT
 ASMFLAGS += -DSWI_DISABLE0
 
 # Linker flags
@@ -174,7 +188,7 @@ LDFLAGS += -Wl,--gc-sections
 LDFLAGS += --specs=nano.specs -lc -lnosys
 
 
-.PHONY: $(TARGETS) default all clean help flash 
+.PHONY: $(TARGETS) default all clean help flash flash_softdevice
 
 # Default target - first one defined
 default: nrf52840_xxaa
@@ -194,6 +208,12 @@ $(foreach target, $(TARGETS), $(call define_target, $(target)))
 flash: $(OUTPUT_DIRECTORY)/nrf52840_xxaa.hex
 	@echo Flashing: $<
 	nrfjprog --program $< -f nrf52 --sectorerase
+	nrfjprog --reset -f nrf52
+
+# Flash softdevice
+flash_softdevice:
+	@echo Flashing: s140_nrf52840_5.0.0-2.alpha_softdevice.hex
+	nrfjprog --program $(SDK_ROOT)/components/softdevice/s140/hex/s140_nrf52840_5.0.0-2.alpha_softdevice.hex -f nrf52 --sectorerase 
 	nrfjprog --reset -f nrf52
 
 erase:
