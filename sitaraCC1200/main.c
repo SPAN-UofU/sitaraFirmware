@@ -44,7 +44,7 @@
 /******************************************************************************
  * Local Macro Declarations                                                    * 
  ******************************************************************************/
-//#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+//#define ARR_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 // #define SPI_PATH 	"/dev/spidev2.0"
 
@@ -58,13 +58,13 @@ extern const cc1200_rf_cfg_t CC1200_RF_CFG;
 #define CC1200_RF_CFG cc1200_802154g_434mhz_2gfsk_50kbps
 
 
-// static uint8_t tx_msg[] = {0x18, 0, 0, 'T', 'I', 'C', 'C', '1', '2', '0', '0', 'A', 'L'};
+static uint8_t tx_msg[] = {0x18, 0, 0, 'T', 'I', 'C', 'C', '1', '2', '0', '0', 'A', 'L'};
 //static uint8_t rx_msg[ARR_SIZE(tx_msg)] = {0, };
 //static const uint8_t m_length = sizeof(tx_msg);        /**< Transfer length. */
 
 /// MAIN ///
 int main(void){
-	// uint8_t isTX = 0;
+	uint8_t isTX = 0;
 	
 	/*if(argc != 2)
 	{
@@ -76,12 +76,13 @@ int main(void){
 		isTX = atoi(argv[1]);
 	}
 	*/
+
 	// nrf code
 
 	cc1200_init();
 
 	// Write registers to radio
-	/*
+	
 	cc1200_write_reg_settings(CC1200_RF_CFG.register_settings, CC1200_RF_CFG.size_of_register_settings);
 
 	uint8_t rxbytes;
@@ -93,14 +94,15 @@ int main(void){
 
 		// RX
 		cc1200_cmd_strobe(CC1200_SRX);
-
+	
 		while(1)
 		{
 			
 			uint8_t rx_msg[ARRAY_SIZE(tx_msg)] = {0, };
 			cc1200_read_register(CC1200_MARC_STATUS1, &status);
 			if(status == CC1200_MARC_STATUS1_RX_SUCCEED)
-			{
+			{	
+				NRF_LOG_INFO("In if");
 				cc1200_read_register(CC1200_NUM_RXBYTES, &rxbytes);
 				if (rxbytes != 0)
 				{
@@ -111,6 +113,7 @@ int main(void){
 					}
 					else
 					{
+						NRF_LOG_INFO("In else");
 						int rx_fifo_bytes = rxbytes - 2;
 						cc1200_read_rxfifo(rx_msg, rx_fifo_bytes);
 
@@ -172,7 +175,6 @@ int main(void){
 			usleep(1000000);
 		}
 	}
-	*/
-
+	
 	return 0;
 }

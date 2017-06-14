@@ -20,8 +20,6 @@
 #include "app_error.h"
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
-#include "nrf_delay.h" // Remove later
-
 /* Defines and register set */
 #include "cc1200.h"
 #include "cc1200-const.h"
@@ -35,125 +33,88 @@
 #define SPI_INSTANCE  0 /**< SPI instance index. */
 static const nrf_drv_spi_t spi = NRF_DRV_SPI_INSTANCE(SPI_INSTANCE);
  
-static uint8_t buf[1024];
-static uint8_t tx_buf[1024];
-static uint8_t rx_buf[1024];
+static uint8_t tx_buf[128];
+static uint8_t rx_buf[128];
 static volatile bool spi_xfer_done;
 
-void spi_event_handler(nrf_drv_spi_evt_t const * p_event,
-                       void *                    p_context)
+void spi_event_handler(nrf_drv_spi_evt_t const * p_event, void *p_context)
 {
     spi_xfer_done = true;
-    NRF_LOG_INFO("Transfer completed.\r\n");
-    //if (rx_buf[0] != 0)
-    //{
-    //    NRF_LOG_INFO(" Received: \r\n");
-    //    NRF_LOG_HEXDUMP_INFO(rx_buf, strlen((const char *)rx_buf));
-    //}
+  	NRF_LOG_INFO("Transfer completed.\r\n");
 }
 
 int cc1200_cmd_strobe(uint8_t cmd)
 {	
-	/*struct spi_ioc_transfer transfer = {
-		.tx_buf = (unsigned long)buf,
-		.rx_buf = (unsigned long)buf,
-		.len = 0,
-		.delay_usecs = delay,
-		.speed_hz = speed,
-		.bits_per_word = bits,
-	};
-
-	buf[transfer.len++] = cmd;
-
-	// send the SPI message (all of the above fields, inc. buffers)
-	return ioctl(fd, SPI_IOC_MESSAGE(1), &transfer);*/
-
-	static uint8_t len = 0;
-	//static uint8_t rx_len = 0;
+	uint8_t tx_len = 0;
+	uint8_t rx_len = 0;
+	memset(tx_buf, 0, sizeof(tx_buf));
 	memset(rx_buf, 0, sizeof(rx_buf));
 
-	tx_buf[len++] = cmd;
-	//rx_len = len+1;
+	tx_buf[tx_len++] = cmd;
+	rx_len = tx_len+1;
 
 	NRF_LOG_HEXDUMP_INFO(tx_buf, strlen((const char *)tx_buf));
-	spi_xfer_done = false;
-	uint8_t status = nrf_drv_spi_transfer(&spi, tx_buf, len, rx_buf, len);
-	 
-	APP_ERROR_CHECK(status); // SPI TRANSFER
+	
+	spi_xfer_done = false; 
+	uint8_t status = nrf_drv_spi_transfer(&spi, tx_buf, tx_len, rx_buf, rx_len); // SPI TRANSFER
+	APP_ERROR_CHECK(status);
 	while(!spi_xfer_done){} // wait
+	
 	NRF_LOG_FLUSH();
-
+	
 	return status;	
 }
 
 int
 cc1200_get_status(uint8_t *status)
 {
+	uint8_t tx_len = 0;
+	uint8_t rx_len = 0;
+	memset(tx_buf, 0, sizeof(tx_buf));
+	memset(rx_buf, 0, sizeof(rx_buf));
 	
-	/*struct spi_ioc_transfer transfer = {
-		.tx_buf = (unsigned long)buf,
-		.rx_buf = (unsigned long)buf,
-		.len = 0,
-		.delay_usecs = delay,
-		.speed_hz = speed,
-		.bits_per_word = bits,
-	};*/
-
-	static uint8_t len = 0;
-
-	tx_buf[len++] = CC1200_SNOP;
+	tx_buf[tx_len++] = CC1200_SNOP;
+	rx_len = tx_len+1;
 
 	spi_xfer_done = false;
-	uint8_t ret = nrf_drv_spi_transfer(&spi, tx_buf, len, rx_buf, len);
+	uint8_t ret = nrf_drv_spi_transfer(&spi, tx_buf, tx_len, rx_buf, rx_len);
 	APP_ERROR_CHECK(ret);
 	while(!spi_xfer_done){} // wait
+
 	NRF_LOG_FLUSH();
-	// send the SPI message (all of the above fields, inc. buffers)
-	//ret = ioctl(fd, SPI_IOC_MESSAGE(1), &transfer);
-	
+
 	if(ret < 0)
 		return ret;
 	else
-		*status = buf[0];
-	return ret;
+		*status = rx_buf[0];
+	return *status;
 }
 
 int cc1200_write_register(uint16_t reg, uint8_t value)
-{
-	
-	/*struct spi_ioc_transfer transfer = {
-		.tx_buf = (unsigned long)buf,
-		.rx_buf = (unsigned long)buf,
-		.len = 0,
-		.delay_usecs = delay,
-		.speed_hz = speed,
-		.bits_per_word = bits,
-	};*/
-
-	// Reg
-	static uint8_t len = 0;
-	//static uint8_t rx_len = 0;
-	
+{	
+	uint8_t tx_len = 0;
+	uint8_t rx_len = 0;
+	memset(tx_buf, 0, sizeof(tx_buf));
 	memset(rx_buf, 0, sizeof(rx_buf));
 
 	if (!CC1200_IS_EXTENDED_ADDR(reg)) {
-		tx_buf[len++] = CC1200_WRITE_BIT | reg;
-		tx_buf[len++] = value;
+		tx_buf[tx_len++] = CC1200_WRITE_BIT | reg;
+		tx_buf[tx_len++] = value;
 	} 
 	// Extended Address
 	else {
-		tx_buf[len++] = CC1200_WRITE_BIT | CC1200_EXT_REG_MASK;
-		tx_buf[len++] = CC1200_UNEXTEND_ADDR(reg);
-		tx_buf[len++] = value;
+		tx_buf[tx_len++] = CC1200_WRITE_BIT | CC1200_EXT_REG_MASK;
+		tx_buf[tx_len++] = CC1200_UNEXTEND_ADDR(reg);
+		tx_buf[tx_len++] = value;
 	}
 
-	// send the SPI message (all of the above fields, inc. buffers)
-	//ret = ioctl(fd, SPI_IOC_MESSAGE(1), &transfer);
+	rx_len = tx_len;
 
 	spi_xfer_done = false;
-	uint8_t ret = nrf_drv_spi_transfer(&spi, tx_buf, len, rx_buf, len);
+	uint8_t ret = nrf_drv_spi_transfer(&spi, tx_buf, tx_len, rx_buf, rx_len);
 	APP_ERROR_CHECK(ret);
 	while(!spi_xfer_done){} // wait
+
 	NRF_LOG_FLUSH();
 
 	return ret;
@@ -175,88 +136,69 @@ void cc1200_write_reg_settings(const registerSetting_t *reg_settings,
 
 int cc1200_read_register(uint16_t reg, uint8_t *data)
 {
-	
-	/*struct spi_ioc_transfer transfer = {
-		.tx_buf = (unsigned long)buf,
-		.rx_buf = (unsigned long)buf,
-		.len = 0,
-		.delay_usecs = delay,
-		.speed_hz = speed,
-		.bits_per_word = bits,
-	};*/
-	uint8_t len = 0;
+	uint8_t tx_len = 0;
 	uint8_t rx_len = 0;
 	memset(tx_buf, 0, sizeof(tx_buf));
 	memset(rx_buf, 0, sizeof(rx_buf));
 
 	// Reg
 	if (!CC1200_IS_EXTENDED_ADDR(reg)) {
-		tx_buf[len++] = CC1200_READ_BIT | reg;
+		tx_buf[tx_len++] = CC1200_READ_BIT | reg;
 	} 
 	// Extended Address
 	else {
-		tx_buf[len++] = CC1200_READ_BIT | CC1200_EXT_REG_MASK;
-		tx_buf[len++] = CC1200_UNEXTEND_ADDR(reg);
+		tx_buf[tx_len++] = CC1200_READ_BIT | CC1200_EXT_REG_MASK;
+		tx_buf[tx_len++] = CC1200_UNEXTEND_ADDR(reg);
 	}
 
-	tx_buf[len++] = CC1200_SNOP;
-	
-	//rx_len = len+1;
+	tx_buf[tx_len++] = CC1200_SNOP;
 
-	//ret = ioctl(fd, SPI_IOC_MESSAGE(1), &transfer);
-	//while(!spi_xfer_done){}
+	NRF_LOG_INFO("Transfering:");
+	NRF_LOG_HEXDUMP_INFO(tx_buf, tx_len);
+
+	rx_len = tx_len;
+
 	spi_xfer_done = false;
-	
-	NRF_LOG_INFO("Transfering: %x\r\n", len);
-	NRF_LOG_HEXDUMP_INFO(tx_buf, len);
-
-	uint8_t ret = nrf_drv_spi_transfer(&spi, tx_buf, len, rx_buf, rx_len);
+	uint8_t ret = nrf_drv_spi_transfer(&spi, tx_buf, tx_len, rx_buf, rx_len);
 	APP_ERROR_CHECK(ret);
-
 	while(!spi_xfer_done){} // wait
 	
-	NRF_LOG_INFO("Received: %x\r\n", rx_len);
+	NRF_LOG_INFO("Received");
 	NRF_LOG_HEXDUMP_INFO(rx_buf, rx_len);
-	//NRF_LOG_INFO("data in buffer is %x , %x , %x , %x\r\n", rx_buf[rx_len-1], rx_buf[rx_len-2], rx_buf[rx_len-3], rx_buf[rx_len-4]);
+
 	NRF_LOG_FLUSH();
 
 	if(ret < 0)
 		return ret;
 	else
-		*data = rx_buf[len];
-		// send the SPI message (all of the above fields, inc. buffers)
+		*data = rx_buf[rx_len-1];
 	return ret;
 }
 
 int cc1200_write_txfifo(uint8_t *data, uint8_t len)
 {
-	
-	/*struct spi_ioc_transfer transfer = {
-		.tx_buf = (unsigned long)buf,
-		.rx_buf = (unsigned long)buf,
-		.len = 0,
-		.delay_usecs = delay,
-		.speed_hz = speed,
-		.bits_per_word = bits,
-	};*/
-	static uint8_t length = 0;
-	
+	uint8_t tx_len = 0;
+	uint8_t rx_len = 0;
+	memset(tx_buf, 0, sizeof(tx_buf));
+	memset(rx_buf, 0, sizeof(rx_buf));
+
 	// Reg
-	buf[length++] = CC1200_FIFO | CC1200_WRITE_BIT | CC1200_BURST_BIT;
-	length += len;
+	tx_buf[tx_len] = CC1200_FIFO | CC1200_WRITE_BIT | CC1200_BURST_BIT;
+	tx_len += len;
 
 	int j;
 	for (j = 0; j < len; j++)
 	{
-		buf[j+1] = data[j];
+		tx_buf[j+1] = data[j];
 	}
 
-	// send the SPI message (all of the above fields, inc. buffers)
-	//ret = ioctl(fd, SPI_IOC_MESSAGE(1), &transfer);
+	rx_len = tx_len;
+
 	spi_xfer_done = false;
-	uint8_t ret = nrf_drv_spi_transfer(&spi, buf, length, buf, length);
+	uint8_t ret = nrf_drv_spi_transfer(&spi, tx_buf, tx_len, rx_buf, rx_len);
 	APP_ERROR_CHECK(ret);
 	while(!spi_xfer_done){}
+
 	NRF_LOG_FLUSH();
 
 	return ret;
@@ -264,40 +206,33 @@ int cc1200_write_txfifo(uint8_t *data, uint8_t len)
 
 int cc1200_read_rxfifo(uint8_t *data, uint8_t len)
 {
-	
-	/*struct spi_ioc_transfer transfer = {
-		.tx_buf = (unsigned long)buf,
-		.rx_buf = (unsigned long)buf,
-		.len = 0,
-		.delay_usecs = delay,
-		.speed_hz = speed,
-		.bits_per_word = bits,
-	};*/
+	uint8_t tx_len = 0;
+	uint8_t rx_len = 0;
+	memset(tx_buf, 0, sizeof(tx_buf));
+	memset(rx_buf, 0, sizeof(rx_buf));
 
-	static uint8_t length = 0;
-	
-	buf[length++] = CC1200_FIFO | CC1200_READ_BIT | CC1200_BURST_BIT;
-	length += len;
+	tx_buf[tx_len++] = CC1200_FIFO | CC1200_READ_BIT | CC1200_BURST_BIT;
+	tx_len += len;
+	rx_len = tx_len;
 
-	//ret = ioctl(fd, SPI_IOC_MESSAGE(1), &transfer);
 	spi_xfer_done = false;
-	uint8_t ret = nrf_drv_spi_transfer(&spi, buf, length, buf, length);
+	uint8_t ret = nrf_drv_spi_transfer(&spi, tx_buf, tx_len, rx_buf, rx_len);
 	APP_ERROR_CHECK(ret);
 	while(!spi_xfer_done){}
+
 	NRF_LOG_FLUSH();
+
 
 	if(ret < 0)
 		return ret;
 	else
 	{
 		int j;
-		for (j = 0; j < length; j++)
+		for (j = 0; j < tx_len; j++)
 		{
-			data[j] = buf[j+1];
+			data[j] = rx_buf[j+1];
 		}
 	}
-
-	// send the SPI message (all of the above fields, inc. buffers)
 	return ret;
 }
 
@@ -309,7 +244,7 @@ int cc1200_init(void)
 
 	APP_ERROR_CHECK(NRF_LOG_INIT(NULL));
     NRF_LOG_INFO("SPI example\r\n");
-    //NRF_SPIM0->RXD.MAXCNT = 1;
+    
     nrf_drv_spi_config_t spi_config = NRF_DRV_SPI_DEFAULT_CONFIG;
     spi_config.ss_pin   = SPI_SS_PIN;
     spi_config.miso_pin = SPI_MISO_PIN;
@@ -317,58 +252,16 @@ int cc1200_init(void)
     spi_config.sck_pin  = SPI_SCK_PIN;
     APP_ERROR_CHECK(nrf_drv_spi_init(&spi, &spi_config, spi_event_handler, NULL));
 
-	/*// The following calls set up the CC1200 SPI bus properties
-	if((fd = open(spi_path, O_RDWR))<0){
-		perror("SPI Error: Can't open device.");
-		return -1;
-	}
-	if(ioctl(fd, SPI_IOC_WR_MODE, &mode)==-1){
-		perror("SPI: Can't set SPI mode.");
-		return -1;
-	}
-	if(ioctl(fd, SPI_IOC_RD_MODE, &mode)==-1){
-		perror("SPI: Can't get SPI mode.");
-		return -1;
-	}
-	if(ioctl(fd, SPI_IOC_WR_BITS_PER_WORD, &bits)==-1){
-		perror("SPI: Can't set bits per word.");
-		return -1;
-	}
-	if(ioctl(fd, SPI_IOC_RD_BITS_PER_WORD, &bits)==-1){
-		perror("SPI: Can't get bits per word.");
-		return -1;
-	}
-	if(ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed)==-1){
-		perror("SPI: Can't set max speed HZ");
-		return -1;
-	}
-	if(ioctl(fd, SPI_IOC_RD_MAX_SPEED_HZ, &speed)==-1){
-		perror("SPI: Can't get max speed HZ.");
-		return -1;
-	}
-	
-	// Check that the properties have been set
-	printf("SPI Mode is: %d\n", mode);
-	printf("SPI Bits is: %d\n", bits);
-	printf("SPI Speed is: %d\n", speed);
-	*/
 	// Reset Radio
 	cc1200_cmd_strobe(CC1200_SRES);
 
 	// Get Chip Info
 	cc1200_read_register(CC1200_PARTNUMBER, &partnum);
-	//NRF_SPIM0->ENABLE = 0;
-
-   	//nrf_drv_spi_uninit(&spi);
-	
-	//nrf_delay_ms(2000);
-	//NRF_SPI0->ENABLE = 1;
-	//APP_ERROR_CHECK(nrf_drv_spi_init(&spi, &spi_config, spi_event_handler, NULL));
 	
 	cc1200_read_register(CC1200_PARTVERSION, &partver);
+	
 	NRF_LOG_INFO("CC1200 Chip Number: 0x%x Chip Version: 0x%x\r\n", partnum, partver);
 	NRF_LOG_FLUSH();
-	
 
 	return 0;
 }
