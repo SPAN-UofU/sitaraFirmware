@@ -2,7 +2,7 @@ PROJECT_NAME     := blinky_sitara
 TARGETS          := nrf52840_xxaa
 OUTPUT_DIRECTORY := _build
 
-SDK_ROOT := ../../SDK
+SDK_ROOT := ../../nRF_SDK_13_0_0
 PROJ_DIR := ./
 
 $(OUTPUT_DIRECTORY)/nrf52840_xxaa.out: \
@@ -193,7 +193,7 @@ $(foreach target, $(TARGETS), $(call define_target, $(target)))
 # Flash the program
 flash: $(OUTPUT_DIRECTORY)/nrf52840_xxaa.hex
 	@echo Flashing: $<
-	nrfjprog --program $< -f nrf52 --sectorerase
+	nrfjprog --program $< -f nrf52 --sectorerase --log
 	nrfjprog --reset -f nrf52
 
 erase:

@@ -58,13 +58,13 @@ extern const cc1200_rf_cfg_t CC1200_RF_CFG;
 #define CC1200_RF_CFG cc1200_802154g_434mhz_2gfsk_50kbps
 
 
-static uint8_t tx_msg[] = {0x18, 0, 0, 'T', 'I', 'C', 'C', '1', '2', '0', '0', 'A', 'L'};
+// static uint8_t tx_msg[] = {0x18, 0, 0, 'T', 'I', 'C', 'C', '1', '2', '0', '0', 'A', 'L'};
 //static uint8_t rx_msg[ARR_SIZE(tx_msg)] = {0, };
 //static const uint8_t m_length = sizeof(tx_msg);        /**< Transfer length. */
 
 /// MAIN ///
 int main(void){
-	uint8_t isTX = 0;
+	// uint8_t isTX = 0;
 	
 	/*if(argc != 2)
 	{
@@ -82,7 +82,7 @@ int main(void){
 	cc1200_init();
 
 	// Write registers to radio
-	
+	/*
 	cc1200_write_reg_settings(CC1200_RF_CFG.register_settings, CC1200_RF_CFG.size_of_register_settings);
 
 	uint8_t rxbytes;
@@ -175,6 +175,7 @@ int main(void){
 			usleep(1000000);
 		}
 	}
+	*/
 	
 	return 0;
 }

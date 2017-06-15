@@ -1,4 +1,3 @@
 # sitaraFirmware
 
-unpack nRF5_SDK_13.0.0_04a0bfd.zip as SDK
-clone sitaraFirmware to the same folder
+clone nRF_SDK_13_0_0 and sitaraFirmware into the same folder
