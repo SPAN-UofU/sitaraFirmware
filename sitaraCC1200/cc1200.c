@@ -24,7 +24,7 @@
 #include "cc1200.h"
 #include "cc1200-const.h"
 #include "cc1200-rf-cfg.h"
-
+//#include "nrf_delay.h"
 /******************************************************************************
  * Local Macro Declarations                                                    * 
  ******************************************************************************/
@@ -33,8 +33,8 @@
 #define SPI_INSTANCE  0 /**< SPI instance index. */
 static const nrf_drv_spi_t spi = NRF_DRV_SPI_INSTANCE(SPI_INSTANCE);
  
-static uint8_t tx_buf[128];
-static uint8_t rx_buf[128];
+uint8_t tx_buf[128];
+uint8_t rx_buf[128];
 static volatile bool spi_xfer_done;
 
 void spi_event_handler(nrf_drv_spi_evt_t const * p_event, void *p_context)
@@ -53,7 +53,7 @@ int cc1200_cmd_strobe(uint8_t cmd)
 	tx_buf[tx_len++] = cmd;
 	rx_len = tx_len+1;
 
-	NRF_LOG_HEXDUMP_INFO(tx_buf, strlen((const char *)tx_buf));
+	//NRF_LOG_HEXDUMP_INFO(tx_buf, strlen((const char *)tx_buf));
 	
 	spi_xfer_done = false; 
 	uint8_t status = nrf_drv_spi_transfer(&spi, tx_buf, tx_len, rx_buf, rx_len); // SPI TRANSFER
@@ -62,7 +62,7 @@ int cc1200_cmd_strobe(uint8_t cmd)
 	
 	NRF_LOG_FLUSH();
 	
-	return status;	
+	return 0;	
 }
 
 int
@@ -80,13 +80,15 @@ cc1200_get_status(uint8_t *status)
 	uint8_t ret = nrf_drv_spi_transfer(&spi, tx_buf, tx_len, rx_buf, rx_len);
 	APP_ERROR_CHECK(ret);
 	while(!spi_xfer_done){} // wait
-
+	NRF_LOG_HEXDUMP_INFO(rx_buf,rx_len);
+	NRF_LOG_INFO(" status bit is %x", rx_buf[0]);
 	NRF_LOG_FLUSH();
 
 	if(ret < 0)
 		return ret;
 	else
 		*status = rx_buf[0];
+		//nrf_delay_ms(1000); // remove later
 	return *status;
 }
 
@@ -154,7 +156,7 @@ int cc1200_read_register(uint16_t reg, uint8_t *data)
 	tx_buf[tx_len++] = CC1200_SNOP;
 
 	NRF_LOG_INFO("Transfering:");
-	NRF_LOG_HEXDUMP_INFO(tx_buf, tx_len);
+	//NRF_LOG_HEXDUMP_INFO(tx_buf, tx_len);
 
 	rx_len = tx_len;
 
@@ -189,9 +191,11 @@ int cc1200_write_txfifo(uint8_t *data, uint8_t len)
 	int j;
 	for (j = 0; j < len; j++)
 	{
-		tx_buf[j+1] = data[j];
+		tx_buf[j] = data[j];
 	}
-
+	
+	NRF_LOG_HEXDUMP_INFO(tx_buf, tx_len);
+	NRF_LOG_INFO("size %d", tx_len);
 	rx_len = tx_len;
 
 	spi_xfer_done = false;
@@ -228,9 +232,9 @@ int cc1200_read_rxfifo(uint8_t *data, uint8_t len)
 	else
 	{
 		int j;
-		for (j = 0; j < tx_len; j++)
+		for (j = 0; j < rx_len; j++)
 		{
-			data[j] = rx_buf[j+1];
+			data[j] = rx_buf[j];
 		}
 	}
 	return ret;
@@ -262,6 +266,6 @@ int cc1200_init(void)
 	
 	NRF_LOG_INFO("CC1200 Chip Number: 0x%x Chip Version: 0x%x\r\n", partnum, partver);
 	NRF_LOG_FLUSH();
-
+	//nrf_delay_ms(5000); // remove later
 	return 0;
 }

@@ -44,7 +44,7 @@
 /******************************************************************************
  * Local Macro Declarations                                                    * 
  ******************************************************************************/
-//#define ARR_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+#define ARR_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 // #define SPI_PATH 	"/dev/spidev2.0"
 
@@ -58,39 +58,25 @@ extern const cc1200_rf_cfg_t CC1200_RF_CFG;
 #define CC1200_RF_CFG cc1200_802154g_434mhz_2gfsk_50kbps
 
 
-// static uint8_t tx_msg[] = {0x18, 0, 0, 'T', 'I', 'C', 'C', '1', '2', '0', '0', 'A', 'L'};
+static uint8_t tx_msg[] = {0x18, 0, 0, 'T', 'I', 'C', 'C', '1', '2', '0', '0', 'A', 'L'};
 //static uint8_t rx_msg[ARR_SIZE(tx_msg)] = {0, };
 //static const uint8_t m_length = sizeof(tx_msg);        /**< Transfer length. */
 
 /// MAIN ///
 int main(void){
-	// uint8_t isTX = 0;
-	
-	/*if(argc != 2)
-	{
-		printf("usage: %s T/RX\n", argv[0]);
-		return 0;
-	}
-	else if(argc == 2)
-	{
-		isTX = atoi(argv[1]);
-	}
-	*/
 
-	// nrf code
-
-	cc1200_init();
-
+	cc1200_init(); // Initialize cc1200
 	// Write registers to radio
-	/*
+	
 	cc1200_write_reg_settings(CC1200_RF_CFG.register_settings, CC1200_RF_CFG.size_of_register_settings);
 
-	uint8_t rxbytes;
-	uint8_t status;
+	static uint8_t status;
 
-	// T/RX
-	if (!isTX) {
-		NRF_LOG_INFO("RX Mode!\n");
+	#ifdef RX_MODE
+
+		uint8_t rxbytes;
+
+		NRF_LOG_INFO("RX Mode!\r\n");
 
 		// RX
 		cc1200_cmd_strobe(CC1200_SRX);
@@ -100,9 +86,9 @@ int main(void){
 			
 			uint8_t rx_msg[ARRAY_SIZE(tx_msg)] = {0, };
 			cc1200_read_register(CC1200_MARC_STATUS1, &status);
+			NRF_LOG_INFO(" status is %d", status)
 			if(status == CC1200_MARC_STATUS1_RX_SUCCEED)
 			{	
-				NRF_LOG_INFO("In if");
 				cc1200_read_register(CC1200_NUM_RXBYTES, &rxbytes);
 				if (rxbytes != 0)
 				{
@@ -118,10 +104,12 @@ int main(void){
 						cc1200_read_rxfifo(rx_msg, rx_fifo_bytes);
 
 						NRF_LOG_INFO("MSG Received! DATA: ");
+						NRF_LOG_HEXDUMP_INFO(tx_msg, sizeof(tx_msg));
+						
 
-						int i;
-						for (i = 0; i < rx_fifo_bytes; i++)
-						NRF_LOG_INFO("%02x ", rx_msg[i]);
+						//int i;
+						//for (i = 0; i < rx_fifo_bytes; i++)
+						
 						NRF_LOG_INFO(" bytes: %d\n", rxbytes);
 
 						cc1200_cmd_strobe(CC1200_SFRX);
@@ -130,9 +118,11 @@ int main(void){
 
 				cc1200_cmd_strobe(CC1200_SRX);
 			}
+			nrf_delay_ms(1000);
 		}
-	}
-	else {
+	
+
+	#else 
 		NRF_LOG_INFO("TX Mode!\n");
 
 		while(1)
@@ -140,10 +130,11 @@ int main(void){
 			tx_msg[1] = sizeof(tx_msg);
 			tx_msg[2]++;
 
-			int i;
-			for (i = 0; i < sizeof(tx_msg); i++)
-				NRF_LOG_INFO("%02x ", tx_msg[i]);
-			NRF_LOG_INFO(" size: %d\n", sizeof(tx_msg));
+			//int i;
+			//for (i = 0; i < sizeof(tx_msg); i++)
+			NRF_LOG_HEXDUMP_INFO(tx_msg, sizeof(tx_msg));
+
+			NRF_LOG_INFO(" size: %d", sizeof(tx_msg));
 
 			// Write data into FIFO
 			cc1200_write_txfifo(tx_msg, sizeof(tx_msg));
@@ -161,21 +152,19 @@ int main(void){
 
 			// Check if TX completed
 			cc1200_read_register(CC1200_MARC_STATUS1, &status);
+			NRF_LOG_INFO("status is %x", status);
 			while(status != CC1200_MARC_STATUS1_TX_SUCCEED)
 			{
 				cc1200_read_register(CC1200_MARC_STATUS1, &status);
-				usleep(1000);
+				nrf_delay_ms(1000);
 			};
 
-			NRF_LOG_INFO
-			("MSG SENT!\n");
+			NRF_LOG_INFO("MSG SENT!\n");
 
 			cc1200_cmd_strobe(CC1200_SFTX);
 
-			usleep(1000000);
+			nrf_delay_ms(1000);
 		}
-	}
-	*/
-	
+	#endif
 	return 0;
 }
