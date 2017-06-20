@@ -86,7 +86,7 @@ int main(void){
 			
 			uint8_t rx_msg[ARRAY_SIZE(tx_msg)] = {0, };
 			cc1200_read_register(CC1200_MARC_STATUS1, &status);
-			NRF_LOG_INFO(" status is %02x\r\n", status)
+			// NRF_LOG_INFO(" status is %02x\r\n", status)
 			if(status == CC1200_MARC_STATUS1_RX_SUCCEED)
 			{	
 				cc1200_read_register(CC1200_NUM_RXBYTES, &rxbytes);
@@ -99,7 +99,7 @@ int main(void){
 					}
 					else
 					{
-						NRF_LOG_INFO("In else");
+						// NRF_LOG_INFO("In else");
 						int rx_fifo_bytes = rxbytes - 2;
 						cc1200_read_rxfifo(rx_msg, rx_fifo_bytes);
 
@@ -110,7 +110,7 @@ int main(void){
 						//int i;
 						//for (i = 0; i < rx_fifo_bytes; i++)
 						
-						NRF_LOG_INFO(" bytes: %d\n", rxbytes);
+						NRF_LOG_INFO(" bytes: %d\r\n", rxbytes);
 
 						cc1200_cmd_strobe(CC1200_SFRX);
 					}

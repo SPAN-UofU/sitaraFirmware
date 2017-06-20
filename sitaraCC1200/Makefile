@@ -78,7 +78,7 @@ CFLAGS += -mfloat-abi=hard -mfpu=fpv4-sp-d16
 # keep every function in separate section, this allows linker to discard unused ones
 CFLAGS += -ffunction-sections -fdata-sections -fno-strict-aliasing
 CFLAGS += -fno-builtin --short-enums 
-##CFLAGS += -DRX_MODE
+CFLAGS += -DRX_MODE
 # C++ flags common to all targets
 CXXFLAGS += \
 
