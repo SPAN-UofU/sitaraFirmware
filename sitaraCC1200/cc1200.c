@@ -155,7 +155,7 @@ int cc1200_read_register(uint16_t reg, uint8_t *data)
 
 	tx_buf[tx_len++] = CC1200_SNOP;
 
-	NRF_LOG_INFO("Transfering:");
+	//NRF_LOG_INFO("Transfering:");
 	//NRF_LOG_HEXDUMP_INFO(tx_buf, tx_len);
 
 	rx_len = tx_len;
@@ -165,7 +165,7 @@ int cc1200_read_register(uint16_t reg, uint8_t *data)
 	APP_ERROR_CHECK(ret);
 	while(!spi_xfer_done){} // wait
 	
-	NRF_LOG_INFO("Received");
+	// NRF_LOG_INFO("Received");
 	NRF_LOG_HEXDUMP_INFO(rx_buf, rx_len);
 
 	NRF_LOG_FLUSH();
@@ -185,17 +185,17 @@ int cc1200_write_txfifo(uint8_t *data, uint8_t len)
 	memset(rx_buf, 0, sizeof(rx_buf));
 
 	// Reg
-	tx_buf[tx_len] = CC1200_FIFO | CC1200_WRITE_BIT | CC1200_BURST_BIT;
+	tx_buf[tx_len++] = CC1200_FIFO | CC1200_WRITE_BIT | CC1200_BURST_BIT;
 	tx_len += len;
 
 	int j;
 	for (j = 0; j < len; j++)
 	{
-		tx_buf[j] = data[j];
+		tx_buf[j+1] = data[j];
 	}
 	
 	NRF_LOG_HEXDUMP_INFO(tx_buf, tx_len);
-	NRF_LOG_INFO("size %d", tx_len);
+	NRF_LOG_INFO("size %d\r\n", tx_len);
 	rx_len = tx_len;
 
 	spi_xfer_done = false;
@@ -225,7 +225,6 @@ int cc1200_read_rxfifo(uint8_t *data, uint8_t len)
 	while(!spi_xfer_done){}
 
 	NRF_LOG_FLUSH();
-
 
 	if(ret < 0)
 		return ret;

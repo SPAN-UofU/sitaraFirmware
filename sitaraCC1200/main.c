@@ -86,7 +86,7 @@ int main(void){
 			
 			uint8_t rx_msg[ARRAY_SIZE(tx_msg)] = {0, };
 			cc1200_read_register(CC1200_MARC_STATUS1, &status);
-			NRF_LOG_INFO(" status is %d", status)
+			NRF_LOG_INFO(" status is %02x\r\n", status)
 			if(status == CC1200_MARC_STATUS1_RX_SUCCEED)
 			{	
 				cc1200_read_register(CC1200_NUM_RXBYTES, &rxbytes);
@@ -125,16 +125,18 @@ int main(void){
 	#else 
 		NRF_LOG_INFO("TX Mode!\n");
 
+		// int i;
+		// for (i = 0; i < 3; i++)
 		while(1)
 		{
 			tx_msg[1] = sizeof(tx_msg);
 			tx_msg[2]++;
 
-			//int i;
-			//for (i = 0; i < sizeof(tx_msg); i++)
-			NRF_LOG_HEXDUMP_INFO(tx_msg, sizeof(tx_msg));
+			// int i;
+			// for (i = 0; i < sizeof(tx_msg); i++)
+			//NRF_LOG_HEXDUMP_INFO(tx_msg, sizeof(tx_msg));
 
-			NRF_LOG_INFO(" size: %d", sizeof(tx_msg));
+			NRF_LOG_INFO(" size: %d\r\n", sizeof(tx_msg));
 
 			// Write data into FIFO
 			cc1200_write_txfifo(tx_msg, sizeof(tx_msg));
@@ -142,7 +144,7 @@ int main(void){
 			// Check status
 			cc1200_get_status(&status);
 			if ((status & 0xF0) == CC1200_STATUS_BYTE_TX_FIFO_ERR) {
-				NRF_LOG_INFO("cc1200 tx fifo error\n");
+				NRF_LOG_INFO("cc1200 tx fifo error\r\n");
 				cc1200_cmd_strobe(CC1200_SFTX);
 				continue;
 			}
@@ -152,14 +154,14 @@ int main(void){
 
 			// Check if TX completed
 			cc1200_read_register(CC1200_MARC_STATUS1, &status);
-			NRF_LOG_INFO("status is %x", status);
 			while(status != CC1200_MARC_STATUS1_TX_SUCCEED)
 			{
 				cc1200_read_register(CC1200_MARC_STATUS1, &status);
+				NRF_LOG_INFO("status is %02x\r\n", status);
 				nrf_delay_ms(1000);
 			};
 
-			NRF_LOG_INFO("MSG SENT!\n");
+			NRF_LOG_INFO("MSG SENT!\r\n");
 
 			cc1200_cmd_strobe(CC1200_SFTX);
 
