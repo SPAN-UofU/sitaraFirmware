@@ -34,14 +34,14 @@
 #define SPI_INSTANCE  0 /**< SPI instance index. */
 static const nrf_drv_spi_t spi = NRF_DRV_SPI_INSTANCE(SPI_INSTANCE);
  
-uint8_t tx_buf[128];
-uint8_t rx_buf[128];
+uint8_t tx_buf[128] = {0};
+uint8_t rx_buf[128] = {0};
 static volatile bool spi_xfer_done;
 
 void spi_event_handler(nrf_drv_spi_evt_t const * p_event, void *p_context)
 {
     spi_xfer_done = true;
-  	NRF_LOG_INFO("Transfer completed.\r\n");
+  	// NRF_LOG_INFO("Transfer completed.\r\n");
 }
 
 int cc1200_cmd_strobe(uint8_t cmd)
@@ -63,7 +63,7 @@ int cc1200_cmd_strobe(uint8_t cmd)
 	
 	NRF_LOG_FLUSH();
 	
-	return 0;
+	return 0;	
 }
 
 int
@@ -82,13 +82,13 @@ cc1200_get_status(uint8_t *status)
 	APP_ERROR_CHECK(ret);
 	while(!spi_xfer_done){} // wait
 	NRF_LOG_HEXDUMP_INFO(rx_buf,rx_len);
-	NRF_LOG_INFO("status bit is %x \r\n", rx_buf[rx_len-1]);
+	NRF_LOG_INFO(" status bit is %x", rx_buf[0]);
 	NRF_LOG_FLUSH();
 
 	if(ret < 0)
 		return ret;
 	else
-		*status = rx_buf[rx_len-1];
+		*status = rx_buf[0];
 		//nrf_delay_ms(1000); // remove later
 	return *status;
 }
@@ -171,10 +171,55 @@ int cc1200_read_register(uint16_t reg, uint8_t *data)
 
 	NRF_LOG_FLUSH();
 
-	if(ret < 0)
+	if(ret < 0) 
 		return ret;
 	else
 		*data = rx_buf[rx_len-1];
+	return ret;
+}
+
+int cc1200_burst_read_register(uint16_t reg, uint8_t *data, uint8_t read_bytes)
+{
+	uint8_t tx_len = 0;
+	uint8_t rx_len = 0;
+	memset(tx_buf, 0, sizeof(tx_buf));
+	memset(rx_buf, 0, sizeof(rx_buf));
+
+	// Reg
+	if (!CC1200_IS_EXTENDED_ADDR(reg)) {
+		tx_buf[tx_len++] = CC1200_READ_BIT | CC1200_BURST_BIT | reg;
+	} 
+	// Extended Address
+	else {
+		tx_buf[tx_len++] = CC1200_READ_BIT | CC1200_BURST_BIT | CC1200_EXT_REG_MASK;
+		tx_buf[tx_len++] = CC1200_UNEXTEND_ADDR(reg);
+	}
+
+	tx_len += read_bytes;
+	rx_len = tx_len;
+	
+	spi_xfer_done = false;
+	uint8_t ret = nrf_drv_spi_transfer(&spi, tx_buf, tx_len, rx_buf, rx_len);
+	APP_ERROR_CHECK(ret);
+	while(!spi_xfer_done){} // wait
+	
+	// NRF_LOG_INFO("Received");
+	// NRF_LOG_HEXDUMP_INFO(rx_buf, rx_len);
+
+	// NRF_LOG_FLUSH();
+
+	if(ret < 0)
+		return ret;
+	else
+	{
+		int j;
+		for (j = 2; j < rx_len; j++)
+		{
+			data[j-2] = rx_buf[j];
+		}
+	}
+
+	// send the SPI message (all of the above fields, inc. buffers)
 	return ret;
 }
 
@@ -259,7 +304,6 @@ int cc1200_init(void)
     spi_config.miso_pin = SPI_MISO_PIN;
     spi_config.mosi_pin = SPI_MOSI_PIN;
     spi_config.sck_pin  = SPI_SCK_PIN;
-    spi_config.frequency = NRF_DRV_SPI_FREQ_8M;
     APP_ERROR_CHECK(nrf_drv_spi_init(&spi, &spi_config, spi_event_handler, NULL));
 
 	// Reset Radio
@@ -270,7 +314,24 @@ int cc1200_init(void)
 	cc1200_read_register(CC1200_PARTVERSION, &partver);
 	
 	NRF_LOG_INFO("CC1200 Chip Number: 0x%x Chip Version: 0x%x\r\n", partnum, partver);
+
+
+	// Get BURST Chip Info
+	uint8_t spimsg[10] = {0};
+	cc1200_burst_read_register(CC1200_PARTNUMBER, spimsg, 2);
+	NRF_LOG_HEXDUMP_INFO(spimsg, 2);
+	NRF_LOG_INFO("CC1200 Chip Number: 0x%x Chip Version: 0x%x\r\n", spimsg[0], spimsg[1]);
+
+	// cc1200_burst_read_register(CC1200_MAGN2, spimsg, 5);
+	// NRF_LOG_HEXDUMP_INFO(spimsg, 10);												
+	// magn2 = spimsg[0];
+	// magn1 = spimsg[1];
+	// magn0 = spimsg[2];
+	// ang1 = spimsg[3];
+	// ang0 = spimsg[4];
+
 	NRF_LOG_FLUSH();
-	
+	//nrf_delay_ms(5000); // remove later
+
 	return 0;
 }
