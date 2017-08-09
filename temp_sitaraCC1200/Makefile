@@ -191,7 +191,7 @@ CFLAGS += -mfloat-abi=hard -mfpu=fpv4-sp-d16
 # keep every function in separate section, this allows linker to discard unused ones
 CFLAGS += -ffunction-sections -fdata-sections -fno-strict-aliasing
 CFLAGS += -fno-builtin --short-enums 
-CFLAGS += -DRX_MODE
+##CFLAGS += -DRX_MODE
 # C++ flags common to all targets
 CXXFLAGS += \
 
@@ -233,9 +233,6 @@ TEMPLATE_PATH := $(SDK_ROOT)/components/toolchain/gcc
 include $(TEMPLATE_PATH)/Makefile.common
 
 $(foreach target, $(TARGETS), $(call define_target, $(target)))
-
-# merge hex code
-merge: ../../mergehex/mergehex -m ../../nRF_SDK_13_0_0/components/softdevice/s140/hex  _build/nrf52840_xxaa.hex -o _build/nrf52840_xxaa.hex 
 
 # Flash the program
 flash: $(OUTPUT_DIRECTORY)/nrf52840_xxaa.hex

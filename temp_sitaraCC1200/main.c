@@ -40,7 +40,7 @@
 
 #define APP_FEATURE_NOT_SUPPORTED       BLE_GATT_STATUS_ATTERR_APP_BEGIN + 2        /**< Reply when unsupported features are requested. */
 
-#define DEVICE_NAME                     "Nordic_BLE"                               /**< Name of device. Will be included in the advertising data. */
+#define DEVICE_NAME                     "Nordic_UART"                               /**< Name of device. Will be included in the advertising data. */
 #define NUS_SERVICE_UUID_TYPE           BLE_UUID_TYPE_VENDOR_BEGIN                  /**< UUID type for the Nordic UART Service (vendor specific). */
 
 #define APP_ADV_INTERVAL                64                                          /**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
@@ -314,12 +314,6 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
             NRF_LOG_INFO("Disconnected\r\n");
             break; // BLE_GAP_EVT_DISCONNECTED
 
-        case BLE_GAP_EVT_SEC_PARAMS_REQUEST:
-            // Pairing not supported
-            err_code = sd_ble_gap_sec_params_reply(m_conn_handle, BLE_GAP_SEC_STATUS_PAIRING_NOT_SUPP, NULL, NULL);
-            APP_ERROR_CHECK(err_code);
-            break; // BLE_GAP_EVT_SEC_PARAMS_REQUEST
-
          case BLE_GAP_EVT_DATA_LENGTH_UPDATE_REQUEST:
         {
             ble_gap_data_length_params_t dl_params;
@@ -546,9 +540,9 @@ void spi_event_handler(nrf_drv_spi_evt_t const * p_event, void *p_context)
         data_array[i] = rx_msg[i];
     }
     uint32_t err_code;
-    if (rx_msg != 0 || (index >= (m_ble_nus_max_data_len)))
+    if (rx_msg != 0)
     {
-        NRF_LOG_INFO("spi handler");
+        //NRF_LOG_INFO("spi handler");
         NRF_LOG_DEBUG("Ready to send data over BLE NUS\r\n");
         NRF_LOG_HEXDUMP_DEBUG(data_array, index);
         do
