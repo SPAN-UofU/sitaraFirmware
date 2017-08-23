@@ -1,3 +1,53 @@
+/**
+ * Copyright (c) 2014 - 2017, Nordic Semiconductor ASA
+ * 
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
+ * 
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 
+ * 2. Redistributions in binary form, except as embedded into a Nordic
+ *    Semiconductor ASA integrated circuit in a product or a software update for
+ *    such product, must reproduce the above copyright notice, this list of
+ *    conditions and the following disclaimer in the documentation and/or other
+ *    materials provided with the distribution.
+ * 
+ * 3. Neither the name of Nordic Semiconductor ASA nor the names of its
+ *    contributors may be used to endorse or promote products derived from this
+ *    software without specific prior written permission.
+ * 
+ * 4. This software, with or without modification, must only be used with a
+ *    Nordic Semiconductor ASA integrated circuit.
+ * 
+ * 5. Any software provided in binary form under this license must not be reverse
+ *    engineered, decompiled, modified and/or disassembled.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY NORDIC SEMICONDUCTOR ASA "AS IS" AND ANY EXPRESS
+ * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL NORDIC SEMICONDUCTOR ASA OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
+ * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * 
+ */
+/** @file
+ *
+ * @defgroup ble_sdk_uart_over_ble_main main.c
+ * @{
+ * @ingroup  ble_sdk_app_nus_eval
+ * @brief    UART over BLE application main file.
+ *
+ * This file contains the source code for a sample application that uses the Nordic UART service.
+ * This application uses the @ref srvlib_conn_params module.
+ */
+
 #include <stdint.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -5,6 +55,13 @@
 #include <string.h>
 #include <time.h>
 
+/* Defines and register set */
+#include "cc1200-const.h"
+#include "cc1200-rf-cfg.h"
+#include "cc1200-802154g-434mhz-2gfsk-50kbps.h"
+#include "cc1200.h"
+
+#include "nrf_drv_spi.h"
 #include "nordic_common.h"
 #include "nrf.h"
 #include "ble_hci.h"
@@ -16,21 +73,14 @@
 #include "app_timer.h"
 #include "app_button.h"
 #include "ble_nus.h"
-#include "nrf_drv_spi.h"
+//#include "app_uart.h"
 #include "app_util_platform.h"
 #include "bsp.h"
 #include "bsp_btn_ble.h"
+#include "app_error.h"
+#include "boards.h"
 #include "nrf_gpio.h"
 #include "nrf_delay.h"
-#include "boards.h"
-#include "app_error.h"
-/* Defines and register set */
-
-#include "cc1200-const.h"
-#include "cc1200-rf-cfg.h"
-#include "cc1200-802154g-434mhz-2gfsk-50kbps.h"
-#include "cc1200.h"
-
 
 #define NRF_LOG_MODULE_NAME "APP"
 #include "nrf_log.h"
@@ -56,20 +106,19 @@
 
 #define DEAD_BEEF                       0xDEADBEEF                                  /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
 
+//#define UART_TX_BUF_SIZE                256                                         /**< UART TX buffer size. */
+//#define UART_RX_BUF_SIZE                256                                         /**< UART RX buffer size. */
+
 static ble_nus_t                        m_nus;                                      /**< Structure to identify the Nordic UART Service. */
 static uint16_t                         m_conn_handle = BLE_CONN_HANDLE_INVALID;    /**< Handle of the current connection. */
 
 static nrf_ble_gatt_t                   m_gatt;                                     /**< GATT module instance. */
-//static ble_uuid_t m_adv_uuids[] = {{BLE_UUID_DEVICE_INFORMATION_SERVICE, BLE_UUID_TYPE_BLE}}; /**< Universally unique service identifiers. */
-
-static ble_uuid_t m_adv_uuids[] = {{BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}};  /**< Universally unique service identifier. */
-static uint16_t m_ble_nus_max_data_len = BLE_GATT_ATT_MTU_DEFAULT - 3;  /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Nordic UART service module. */
+static ble_uuid_t                       m_adv_uuids[] = {{BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}};  /**< Universally unique service identifier. */
+static uint16_t                         m_ble_nus_max_data_len = BLE_GATT_ATT_MTU_DEFAULT - 3;  /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Nordic UART service module. */
 
 
-/******************************************************************************
- * Local Macro Declarations                                                    * 
- ******************************************************************************/
 #define ARR_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+
 /*---------------------------------------------------------------------------*/
 /* RF configuration */
 /*---------------------------------------------------------------------------*/
@@ -78,14 +127,11 @@ static uint16_t m_ble_nus_max_data_len = BLE_GATT_ATT_MTU_DEFAULT - 3;  /**< Max
 extern const cc1200_rf_cfg_t CC1200_RF_CFG;
 #define CC1200_RF_CFG cc1200_802154g_434mhz_2gfsk_50kbps
 
-uint8_t tx_msg[] = {0x18, 0, 0, 'T', 'I', 'C', 'C', '1', '2', '0', '0', 'A', 'L'};
+
+uint8_t tx_msg[] = {0x18, /*0, 0, 5, 6, 8, 6};//*/'T', 49, 'C', 'C', '1', '2', '0', '0', 'A', 'L'};
 uint8_t rx_msg[ARRAY_SIZE(tx_msg)] = {0, };
-int rx_fifo_bytes;
-extern volatile bool spi_xfer_done;
-#define SPI_INSTANCE  0 /**< SPI instance index. */
-static const nrf_drv_spi_t spi = NRF_DRV_SPI_INSTANCE(SPI_INSTANCE);
-
-
+int len = sizeof(tx_msg);
+int rx_fifo_bytes = 0;
 /**@brief Function for assert macro callback.
  *
  * @details This function will be called in case of an assert in the SoftDevice.
@@ -145,30 +191,25 @@ static void gap_params_init(void)
 /**@snippet [Handling the data received over BLE] */
 static void nus_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t length)
 {
-    NRF_LOG_INFO("nus data handler");
-    static uint8_t data_array[BLE_NUS_MAX_DATA_LEN];
-    int index = rx_fifo_bytes;
-    for(int i = 0;i<=index;i++)
-    {
-        data_array[i] = rx_msg[i];
-    }
+    
     uint32_t err_code;
-    if (rx_msg != 0 || (index >= (m_ble_nus_max_data_len)))
+    //NRF_LOG_DEBUG("Received data from BLE NUS. Writing data on UART.\r\n");
+    //NRF_LOG_HEXDUMP_DEBUG(p_data, length);
+
+    // Write registers to radio 
+    NRF_LOG_HEXDUMP_INFO(rx_msg,rx_fifo_bytes);
+    NRF_LOG_FLUSH();
+
+    do
     {
-        NRF_LOG_INFO("nus data handler");
-        NRF_LOG_DEBUG("Ready to send data over BLE NUS\r\n");
-        NRF_LOG_HEXDUMP_DEBUG(data_array, index);
-        do
+        err_code = ble_nus_string_send(&m_nus,tx_msg,len);
+        if ( (err_code != NRF_SUCCESS) && (err_code != NRF_ERROR_BUSY) )
         {
-            err_code = ble_nus_string_send(&m_nus, data_array, index);
-            if ( (err_code != NRF_ERROR_INVALID_STATE) && (err_code != NRF_ERROR_BUSY) )
-            {
-                APP_ERROR_CHECK(err_code);
-            }
+            APP_ERROR_CHECK(err_code);
         }
-        while (err_code == NRF_ERROR_BUSY);
-        index = 0;
-    }
+    } while (err_code == NRF_ERROR_BUSY);
+
+
 }
 /**@snippet [Handling the data received over BLE] */
 
@@ -177,7 +218,7 @@ static void nus_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t lengt
  */
 static void services_init(void)
 {
-    uint32_t err_code;
+    uint32_t       err_code;
     ble_nus_init_t nus_init;
 
     memset(&nus_init, 0, sizeof(nus_init));
@@ -305,6 +346,7 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
             m_conn_handle = p_ble_evt->evt.gap_evt.conn_handle;
 
             NRF_LOG_INFO("Connected\r\n");
+            NRF_LOG_FLUSH();
             break; // BLE_GAP_EVT_CONNECTED
 
         case BLE_GAP_EVT_DISCONNECTED:
@@ -312,7 +354,15 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
             APP_ERROR_CHECK(err_code);
             m_conn_handle = BLE_CONN_HANDLE_INVALID;
             NRF_LOG_INFO("Disconnected\r\n");
+            NRF_LOG_FLUSH();
+
             break; // BLE_GAP_EVT_DISCONNECTED
+
+        case BLE_GAP_EVT_SEC_PARAMS_REQUEST:
+            // Pairing not supported
+            err_code = sd_ble_gap_sec_params_reply(m_conn_handle, BLE_GAP_SEC_STATUS_PAIRING_NOT_SUPP, NULL, NULL);
+            APP_ERROR_CHECK(err_code);
+            break; // BLE_GAP_EVT_SEC_PARAMS_REQUEST
 
          case BLE_GAP_EVT_DATA_LENGTH_UPDATE_REQUEST:
         {
@@ -466,6 +516,8 @@ void gatt_evt_handler(nrf_ble_gatt_t * p_gatt, const nrf_ble_gatt_evt_t * p_evt)
     {
         m_ble_nus_max_data_len = p_evt->params.att_mtu_effective - OPCODE_LENGTH - HANDLE_LENGTH;
         NRF_LOG_INFO("Data len is set to 0x%X(%d)\r\n", m_ble_nus_max_data_len, m_ble_nus_max_data_len);
+        NRF_LOG_FLUSH();
+
     }
     NRF_LOG_DEBUG("ATT MTU exchange completed. central 0x%x peripheral 0x%x\r\n", p_gatt->att_mtu_desired_central, p_gatt->att_mtu_desired_periph);
 }
@@ -520,6 +572,8 @@ void bsp_event_handler(bsp_event_t event)
             break;
     }
 }
+
+
 /**@brief   Function for handling app_uart events.
  *
  * @details This function will receive a single character from the app_uart module and append it to
@@ -528,65 +582,8 @@ void bsp_event_handler(bsp_event_t event)
  */
 /**@snippet [Handling the data received over UART] */
 
-/**@snippet [Handling the data received over UART] */
-void spi_event_handler(nrf_drv_spi_evt_t const * p_event, void *p_context)
-{
-    spi_xfer_done = true;
-    //NRF_LOG_INFO("Transfer completed.\r\n");
-    static uint8_t data_array[BLE_NUS_MAX_DATA_LEN];
-    int index = rx_fifo_bytes;
-    for(int i = 0;i<=index;i++)
-    {
-        data_array[i] = rx_msg[i];
-    }
-    uint32_t err_code;
-    if (rx_msg != 0)
-    {
-        //NRF_LOG_INFO("spi handler");
-        NRF_LOG_DEBUG("Ready to send data over BLE NUS\r\n");
-        NRF_LOG_HEXDUMP_DEBUG(data_array, index);
-        do
-        {
-            err_code = ble_nus_string_send(&m_nus, data_array, index);
-            if ( (err_code != NRF_ERROR_INVALID_STATE) && (err_code != NRF_ERROR_BUSY) )
-            {
-                APP_ERROR_CHECK(err_code);
-            }
-        }
-        while (err_code == NRF_ERROR_BUSY);
-        index = 0;
-    }
-}
+/**@snippet [UART Initialization] */
 
-int cc1200_init(void)
-{      
-    
-    uint8_t partnum = 0;
-    uint8_t partver = 0;
-
-    APP_ERROR_CHECK(NRF_LOG_INIT(NULL));
-    NRF_LOG_INFO("SPI example\r\n");
-    
-    nrf_drv_spi_config_t spi_config = NRF_DRV_SPI_DEFAULT_CONFIG;
-    spi_config.ss_pin   = SPI_SS_PIN;
-    spi_config.miso_pin = SPI_MISO_PIN;
-    spi_config.mosi_pin = SPI_MOSI_PIN;
-    spi_config.sck_pin  = SPI_SCK_PIN;
-    APP_ERROR_CHECK(nrf_drv_spi_init(&spi, &spi_config, spi_event_handler, NULL));
-
-    // Reset Radio
-    cc1200_cmd_strobe(CC1200_SRES);
-
-    // Get Chip Info
-    cc1200_read_register(CC1200_PARTNUMBER, &partnum);
-    
-    cc1200_read_register(CC1200_PARTVERSION, &partver);
-    
-    NRF_LOG_INFO("CC1200 Chip Number: 0x%x Chip Version: 0x%x\r\n", partnum, partver);
-    NRF_LOG_FLUSH();
-    //nrf_delay_ms(5000); // remove later
-    return 0;
-}
 
 /**@brief Function for initializing the Advertising functionality.
  */
@@ -654,77 +651,19 @@ static void power_manage(void)
     APP_ERROR_CHECK(err_code);
 }
 
-int cc1200_rx_msg(uint8_t *data, uint8_t len)
-{
-    uint8_t rxbytes;
-    uint8_t status;
-    cc1200_cmd_strobe(CC1200_SRX);
-    cc1200_read_register(CC1200_MARC_STATUS1, &status);
-    if(status == CC1200_MARC_STATUS1_RX_SUCCEED)
-    {   
-        cc1200_read_register(CC1200_NUM_RXBYTES, &rxbytes);
-        if (rxbytes != 0)
-        {
-            cc1200_read_register(CC1200_MARCSTATE, &status);
-            if ((status & 0x1F) == CC1200_MARC_STATE_RX_FIFO_ERR)
-            {
-                cc1200_cmd_strobe(CC1200_SFRX);
-            }
-            else
-            {
-                // NRF_LOG_INFO("In else");
-                len = rxbytes - 2;
-                cc1200_read_rxfifo(data, len);
-                NRF_LOG_INFO("MSG Received! DATA: ");
-                //NRF_LOG_HEXDUMP_INFO(tx_msg, sizeof(tx_msg));        
-                NRF_LOG_INFO(" bytes: %d\r\n", len);
-                cc1200_cmd_strobe(CC1200_SFRX);
-            }
-        }
 
-        cc1200_cmd_strobe(CC1200_SRX);
-    }
-    return 0;
-}
-
-int cc1200_tx_msg(uint8_t*data)
-{
-    uint8_t status;
-    data[1] = sizeof(data);
-    NRF_LOG_HEXDUMP_INFO(data, sizeof(data));
-    cc1200_write_txfifo(data, sizeof(data)); // Write data into FIFO
-    cc1200_get_status(&status); // status check
-    if((status & 0xF0) == CC1200_STATUS_BYTE_TX_FIFO_ERR) 
-    {
-        NRF_LOG_INFO("cc1200 tx fifo error\r\n");
-        cc1200_cmd_strobe(CC1200_SFTX);
-    }
-    cc1200_cmd_strobe(CC1200_STX); //TX
-    cc1200_read_register(CC1200_MARC_STATUS1, &status); // Check if TX is completed
-    while(status != CC1200_MARC_STATUS1_TX_SUCCEED)
-    {
-        cc1200_read_register(CC1200_MARC_STATUS1, &status); 
-        nrf_delay_ms(1000); 
-    };
-    NRF_LOG_INFO("Msg Sent!\r\n");
-    cc1200_cmd_strobe(CC1200_SFTX);
-    nrf_delay_ms(1000);
-    return 0;
-}
 /**@brief Application main function.
  */
 int main(void)
 {
     uint32_t err_code;
-    bool erase_bonds;
+    bool     erase_bonds;
 
     // Initialize.
     err_code = app_timer_init();
     APP_ERROR_CHECK(err_code);
-
     cc1200_init();
     cc1200_write_reg_settings(CC1200_RF_CFG.register_settings, CC1200_RF_CFG.size_of_register_settings);
-
     log_init();
 
     buttons_leds_init(&erase_bonds);
@@ -735,24 +674,50 @@ int main(void)
     advertising_init();
     conn_params_init();
 
+    //printf("\r\nUART Start!\r\n");
+    //NRF_LOG_INFO("UART Start!\r\n");
     err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
     APP_ERROR_CHECK(err_code);
-
+    uint8_t status;
+    uint8_t rxbytes;
+    NRF_LOG_INFO("RX Mode!\r\n");
     // Enter main loop.
-    #ifdef RX_MODE
-        NRF_LOG_INFO("RX Mode!\r\n");
-        for (;;)
+    for (;;)
+    {
+        
+        cc1200_cmd_strobe(CC1200_SRX);
+        cc1200_read_register(CC1200_MARC_STATUS1, &status);
+        if(status == CC1200_MARC_STATUS1_RX_SUCCEED)
         {
-            cc1200_rx_msg(rx_msg, rx_fifo_bytes);
-            power_manage();
+            cc1200_read_register(CC1200_NUM_RXBYTES, &rxbytes);
+            if (rxbytes != 0)
+            {
+                rx_fifo_bytes = rxbytes - 2;
+                cc1200_read_register(CC1200_MARCSTATE, &status);
+                if ((status & 0x1F) == CC1200_MARC_STATE_RX_FIFO_ERR)
+                {
+                    cc1200_cmd_strobe(CC1200_SFRX);
+                }
+                else
+                {
+                
+                    cc1200_read_rxfifo(rx_msg, rx_fifo_bytes);
+                    NRF_LOG_INFO("MSG Received! DATA: ");
+                    if(rx_msg != 0)
+                    {
+                        NRF_LOG_HEXDUMP_INFO(rx_msg, rx_fifo_bytes+1);
+                    }
+                    NRF_LOG_INFO(" bytes: %d\r\n", rx_fifo_bytes);
+                    cc1200_cmd_strobe(CC1200_SFRX);
+                }
+            }
         }
-    #else
-        NRF_LOG_INFO("TX Mode!\n");
-        for(;;)
-        {
-            cc1200_tx_msg(tx_msg);
-            power_manage();
-        }
-    #endif
+        power_manage();
+    }
 }
+
+
+/**
+ * @}
+ */
 
