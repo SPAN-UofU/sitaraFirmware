@@ -127,11 +127,11 @@ static uint16_t                         m_ble_nus_max_data_len = BLE_GATT_ATT_MT
 extern const cc1200_rf_cfg_t CC1200_RF_CFG;
 #define CC1200_RF_CFG cc1200_802154g_434mhz_2gfsk_50kbps
 
+static volatile bool ble_spi_done;
 
 uint8_t tx_msg[] = {0x18, /*0, 0, 5, 6, 8, 6};//*/'T', 49, 'C', 'C', '1', '2', '0', '0', 'A', 'L'};
 uint8_t rx_msg[ARRAY_SIZE(tx_msg)] = {0, };
 int len = sizeof(tx_msg);
-int rx_fifo_bytes = 0;
 /**@brief Function for assert macro callback.
  *
  * @details This function will be called in case of an assert in the SoftDevice.
@@ -192,22 +192,21 @@ static void gap_params_init(void)
 static void nus_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t length)
 {
     
-    uint32_t err_code;
+    //uint32_t err_code;
     //NRF_LOG_DEBUG("Received data from BLE NUS. Writing data on UART.\r\n");
     //NRF_LOG_HEXDUMP_DEBUG(p_data, length);
-
+    ble_spi_done = true;
     // Write registers to radio 
-    NRF_LOG_HEXDUMP_INFO(rx_msg,rx_fifo_bytes);
-    NRF_LOG_FLUSH();
-
-    do
+    //NRF_LOG_INFO("rx fifo bytes is %x \r\n", rx_fifo_bytes);
+    //NRF_LOG_HEXDUMP_INFO(rx_msg,rx_fifo_bytes);
+    /*do 
     {
-        err_code = ble_nus_string_send(&m_nus,tx_msg,len);
+        err_code = ble_nus_string_send(&m_nus,rx_msg,rx_fifo_bytes);
         if ( (err_code != NRF_SUCCESS) && (err_code != NRF_ERROR_BUSY) )
         {
             APP_ERROR_CHECK(err_code);
         }
-    } while (err_code == NRF_ERROR_BUSY);
+    } while (err_code == NRF_ERROR_BUSY);*/
 
 
 }
@@ -662,8 +661,7 @@ int main(void)
     // Initialize.
     err_code = app_timer_init();
     APP_ERROR_CHECK(err_code);
-    cc1200_init();
-    cc1200_write_reg_settings(CC1200_RF_CFG.register_settings, CC1200_RF_CFG.size_of_register_settings);
+    
     log_init();
 
     buttons_leds_init(&erase_bonds);
@@ -674,42 +672,61 @@ int main(void)
     advertising_init();
     conn_params_init();
 
-    //printf("\r\nUART Start!\r\n");
-    //NRF_LOG_INFO("UART Start!\r\n");
+    printf("\r\nUART Start!\r\n");
+    NRF_LOG_INFO("UART Start!\r\n");
     err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
     APP_ERROR_CHECK(err_code);
+
+    cc1200_init();
+    cc1200_write_reg_settings(CC1200_RF_CFG.register_settings, CC1200_RF_CFG.size_of_register_settings);
     uint8_t status;
     uint8_t rxbytes;
+
     NRF_LOG_INFO("RX Mode!\r\n");
+    printf("\r\n RX MODE \r\n");
+    cc1200_cmd_strobe(CC1200_SRX);
     // Enter main loop.
     for (;;)
     {
-        
-        cc1200_cmd_strobe(CC1200_SRX);
-        cc1200_read_register(CC1200_MARC_STATUS1, &status);
-        if(status == CC1200_MARC_STATUS1_RX_SUCCEED)
+        while(ble_spi_done)
         {
-            cc1200_read_register(CC1200_NUM_RXBYTES, &rxbytes);
-            if (rxbytes != 0)
+            
+            uint8_t rx_msg[ARRAY_SIZE(tx_msg)] = {0, };
+            cc1200_read_register(CC1200_MARC_STATUS1, &status);
+            if(status == CC1200_MARC_STATUS1_RX_SUCCEED)
             {
-                rx_fifo_bytes = rxbytes - 2;
-                cc1200_read_register(CC1200_MARCSTATE, &status);
-                if ((status & 0x1F) == CC1200_MARC_STATE_RX_FIFO_ERR)
+                cc1200_read_register(CC1200_NUM_RXBYTES, &rxbytes);
+                if (rxbytes != 0)
                 {
-                    cc1200_cmd_strobe(CC1200_SFRX);
-                }
-                else
-                {
-                
-                    cc1200_read_rxfifo(rx_msg, rx_fifo_bytes);
-                    NRF_LOG_INFO("MSG Received! DATA: ");
-                    if(rx_msg != 0)
+                    cc1200_read_register(CC1200_MARCSTATE, &status);
+                    if ((status & 0x1F) == CC1200_MARC_STATE_RX_FIFO_ERR)
                     {
-                        NRF_LOG_HEXDUMP_INFO(rx_msg, rx_fifo_bytes+1);
+                        cc1200_cmd_strobe(CC1200_SFRX);
                     }
-                    NRF_LOG_INFO(" bytes: %d\r\n", rx_fifo_bytes);
-                    cc1200_cmd_strobe(CC1200_SFRX);
+                    else
+                    {
+                        int rx_fifo_bytes = rxbytes - 2;
+                        cc1200_read_rxfifo(rx_msg, rx_fifo_bytes);
+                        NRF_LOG_INFO("MSG Received! DATA: ");
+
+                        do
+                        {
+                            err_code = ble_nus_string_send(&m_nus,rx_msg,rx_fifo_bytes);
+                            if ( (err_code != NRF_SUCCESS) && (err_code != NRF_ERROR_BUSY) )
+                            {
+                                APP_ERROR_CHECK(err_code);
+                            }
+                        } while (err_code == NRF_ERROR_BUSY);
+
+                        if(rx_msg != 0)
+                        {
+                            NRF_LOG_HEXDUMP_INFO(rx_msg, rx_fifo_bytes+1);
+                        }
+                        NRF_LOG_INFO(" bytes: %d\r\n", rx_fifo_bytes);
+                        cc1200_cmd_strobe(CC1200_SFRX);
+                    }
                 }
+                cc1200_cmd_strobe(CC1200_SRX); 
             }
         }
         power_manage();
