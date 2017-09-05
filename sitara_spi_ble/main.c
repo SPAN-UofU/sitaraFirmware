@@ -86,6 +86,10 @@
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
 
+
+#include "nrf_gpiote.h"
+#include "nrf_drv_gpiote.h"
+
 #define CONN_CFG_TAG                    1                                           /**< A tag that refers to the BLE stack configuration we set with @ref sd_ble_cfg_set. Default tag is @ref BLE_CONN_CFG_TAG_DEFAULT. */
 
 #define APP_FEATURE_NOT_SUPPORTED       BLE_GATT_STATUS_ATTERR_APP_BEGIN + 2        /**< Reply when unsupported features are requested. */
@@ -106,9 +110,6 @@
 
 #define DEAD_BEEF                       0xDEADBEEF                                  /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
 
-//#define UART_TX_BUF_SIZE                256                                         /**< UART TX buffer size. */
-//#define UART_RX_BUF_SIZE                256                                         /**< UART RX buffer size. */
-
 static ble_nus_t                        m_nus;                                      /**< Structure to identify the Nordic UART Service. */
 static uint16_t                         m_conn_handle = BLE_CONN_HANDLE_INVALID;    /**< Handle of the current connection. */
 
@@ -118,6 +119,7 @@ static uint16_t                         m_ble_nus_max_data_len = BLE_GATT_ATT_MT
 
 
 #define ARR_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+#define MAGN_VALID_PIN NRF_GPIO_PIN_MAP(1,15)
 
 /*---------------------------------------------------------------------------*/
 /* RF configuration */
@@ -131,7 +133,9 @@ static volatile bool ble_spi_done;
 
 uint8_t tx_msg[] = {0x18, /*0, 0, 5, 6, 8, 6};//*/'T', 49, 'C', 'C', '1', '2', '0', '0', 'A', 'L'};
 uint8_t rx_msg[ARRAY_SIZE(tx_msg)] = {0, };
-int len = sizeof(tx_msg);
+uint8_t spimsg[10] = {0};
+uint8_t sample = false;
+
 /**@brief Function for assert macro callback.
  *
  * @details This function will be called in case of an assert in the SoftDevice.
@@ -148,6 +152,32 @@ void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
     app_error_handler(DEAD_BEEF, line_num, p_file_name);
 }
 
+void magn_vadid_handler(nrf_drv_gpiote_pin_t pin, nrf_gpiote_polarity_t action)
+{
+    // Disable 
+    nrf_drv_gpiote_in_event_disable(MAGN_VALID_PIN);   
+    sample = true;
+    nrf_gpiote_event_clear(NRF_GPIOTE_EVENTS_IN_0); // clear
+    nrf_drv_gpiote_in_event_enable(MAGN_VALID_PIN, true); // Enable
+}
+
+/**
+ * @brief Function for configuring: PIN_IN pin for input, PIN_OUT pin for output,
+ * and configures GPIOTE to give an interrupt on pin change.
+ */
+static void gpio_init(void)
+{
+    ret_code_t err_code;
+
+    err_code = nrf_drv_gpiote_init();
+    APP_ERROR_CHECK(err_code);
+
+    nrf_drv_gpiote_in_config_t magn_valid_pin_config = GPIOTE_CONFIG_IN_SENSE_LOTOHI(true);
+    magn_valid_pin_config.pull = NRF_GPIO_PIN_NOPULL;
+
+    err_code = nrf_drv_gpiote_in_init(MAGN_VALID_PIN, &magn_valid_pin_config, magn_vadid_handler);
+    APP_ERROR_CHECK(err_code);
+}
 
 /**@brief Function for the GAP initialization.
  *
@@ -191,7 +221,8 @@ static void gap_params_init(void)
 /**@snippet [Handling the data received over BLE] */
 static void nus_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t length)
 {
-    
+
+    NRF_LOG_INFO("received %x\r\n", p_data[0]);
     if(p_data[0] == '1')
     {
         ble_spi_done = true;
@@ -651,6 +682,8 @@ int main(void)
     uint32_t err_code;
     bool     erase_bonds;
 
+    cc1200_init();
+    gpio_init();
     // Initialize.
     err_code = app_timer_init();
     APP_ERROR_CHECK(err_code);
@@ -670,57 +703,40 @@ int main(void)
     err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
     APP_ERROR_CHECK(err_code);
 
-    cc1200_init();
+    
     cc1200_write_reg_settings(CC1200_RF_CFG.register_settings, CC1200_RF_CFG.size_of_register_settings);
-    uint8_t status;
-    uint8_t rxbytes;
+    //uint8_t status;
+    //uint8_t rxbytes;
+
+    // Clear
+    nrf_gpiote_event_clear(NRF_GPIOTE_EVENTS_IN_0);
+
+    // Enable interrupt
+    nrf_drv_gpiote_in_event_enable(MAGN_VALID_PIN, true);
 
     NRF_LOG_INFO("RX Mode!\r\n");
-    printf("\r\n RX MODE \r\n");
+
     cc1200_cmd_strobe(CC1200_SRX);
     // Enter main loop.
     for (;;)
     {
         while(ble_spi_done)
         {
-            
-            uint8_t rx_msg[ARRAY_SIZE(tx_msg)] = {0, };
-            cc1200_read_register(CC1200_MARC_STATUS1, &status);
-            if(status == CC1200_MARC_STATUS1_RX_SUCCEED)
+            while(!sample){};
+            sample = false;
+            cc1200_burst_read_register(CC1200_MAGN2, spimsg, 5);
+            NRF_LOG_HEXDUMP_INFO(spimsg, 5); 
+            //NRF_LOG_FLUSH();
+
+            do
             {
-                cc1200_read_register(CC1200_NUM_RXBYTES, &rxbytes);
-                if (rxbytes != 0)
+                err_code = ble_nus_string_send(&m_nus,spimsg,5);
+                if ( (err_code != NRF_SUCCESS) && (err_code != NRF_ERROR_BUSY) )
                 {
-                    cc1200_read_register(CC1200_MARCSTATE, &status);
-                    if ((status & 0x1F) == CC1200_MARC_STATE_RX_FIFO_ERR)
-                    {
-                        cc1200_cmd_strobe(CC1200_SFRX);
-                    }
-                    else
-                    {
-                        int rx_fifo_bytes = rxbytes - 2;
-                        cc1200_read_rxfifo(rx_msg, rx_fifo_bytes);
-                        NRF_LOG_INFO("MSG Received! DATA: ");
-
-                        do
-                        {
-                            err_code = ble_nus_string_send(&m_nus,rx_msg,rx_fifo_bytes);
-                            if ( (err_code != NRF_SUCCESS) && (err_code != NRF_ERROR_BUSY) )
-                            {
-                                APP_ERROR_CHECK(err_code);
-                            }
-                        } while (err_code == NRF_ERROR_BUSY);
-
-                        if(rx_msg != 0)
-                        {
-                            NRF_LOG_HEXDUMP_INFO(rx_msg, rx_fifo_bytes+1);
-                        }
-                        NRF_LOG_INFO(" bytes: %d\r\n", rx_fifo_bytes);
-                        cc1200_cmd_strobe(CC1200_SFRX);
-                    }
+                    APP_ERROR_CHECK(err_code);
                 }
-                cc1200_cmd_strobe(CC1200_SRX); 
-            }
+            } while (err_code == NRF_ERROR_BUSY);
+
         }
         power_manage();
     }
@@ -730,4 +746,3 @@ int main(void)
 /**
  * @}
  */
-

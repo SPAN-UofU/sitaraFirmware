@@ -135,7 +135,7 @@ int main(void){
 
 				cc1200_cmd_strobe(CC1200_SRX);
 			}
-			nrf_delay_ms(1000);
+			//nrf_delay_ms(1000);
 		}
 	
 
@@ -183,14 +183,14 @@ int main(void){
 			{
 				cc1200_read_register(CC1200_MARC_STATUS1, &status);
 				//NRF_LOG_INFO("status is %02x\r\n", status);
-				nrf_delay_ms(1000);
+				//nrf_delay_ms(1000);
 			};
 
 			NRF_LOG_INFO("MSG SENT!\r\n");
 
 			cc1200_cmd_strobe(CC1200_SFTX);
 
-			nrf_delay_ms(1000);
+			//nrf_delay_ms(1000);
 		}
 	#endif
 	return 0;
