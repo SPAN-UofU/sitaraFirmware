@@ -58,7 +58,7 @@
 /* Defines and register set */
 #include "cc1200-const.h"
 #include "cc1200-rf-cfg.h"
-#include "cc1200-802154g-434mhz-2gfsk-50kbps.h"
+#include "cc1200-802154g-434mhz-2gfsk-50kbps-cw.h"
 #include "cc1200.h"
 
 #include "nrf_drv_spi.h"
@@ -81,14 +81,12 @@
 #include "boards.h"
 #include "nrf_gpio.h"
 #include "nrf_delay.h"
+#include "nrf_gpiote.h"
+#include "nrf_drv_gpiote.h"
 
 #define NRF_LOG_MODULE_NAME "APP"
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
-
-
-#include "nrf_gpiote.h"
-#include "nrf_drv_gpiote.h"
 
 #define CONN_CFG_TAG                    1                                           /**< A tag that refers to the BLE stack configuration we set with @ref sd_ble_cfg_set. Default tag is @ref BLE_CONN_CFG_TAG_DEFAULT. */
 
@@ -110,6 +108,9 @@
 
 #define DEAD_BEEF                       0xDEADBEEF                                  /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
 
+//#define UART_TX_BUF_SIZE                256                                         /**< UART TX buffer size. */
+//#define UART_RX_BUF_SIZE                256                                         /**< UART RX buffer size. */
+
 static ble_nus_t                        m_nus;                                      /**< Structure to identify the Nordic UART Service. */
 static uint16_t                         m_conn_handle = BLE_CONN_HANDLE_INVALID;    /**< Handle of the current connection. */
 
@@ -127,14 +128,13 @@ static uint16_t                         m_ble_nus_max_data_len = BLE_GATT_ATT_MT
 /* Import the rf configuration set by CC1200_RF_CFG */
 
 extern const cc1200_rf_cfg_t CC1200_RF_CFG;
-#define CC1200_RF_CFG cc1200_802154g_434mhz_2gfsk_50kbps
+#define CC1200_RF_CFG cc1200_802154g_434mhz_2gfsk_50kbps_cw
 
 static volatile bool ble_spi_done;
-
-uint8_t tx_msg[] = {0x18, /*0, 0, 5, 6, 8, 6};//*/'T', 49, 'C', 'C', '1', '2', '0', '0', 'A', 'L'};
-uint8_t rx_msg[ARRAY_SIZE(tx_msg)] = {0, };
 uint8_t spimsg[10] = {0};
 uint8_t sample = false;
+
+//uint8_t tx_msg[] = {0x18, /*0, 0, 5, 6, 8, 6};//*/'T', 49, 'C', 'C', '1', '2', '0', '0', 'A', 'L'};
 
 /**@brief Function for assert macro callback.
  *
@@ -152,32 +152,6 @@ void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
     app_error_handler(DEAD_BEEF, line_num, p_file_name);
 }
 
-void magn_vadid_handler(nrf_drv_gpiote_pin_t pin, nrf_gpiote_polarity_t action)
-{
-    // Disable 
-    nrf_drv_gpiote_in_event_disable(MAGN_VALID_PIN);   
-    sample = true;
-    nrf_gpiote_event_clear(NRF_GPIOTE_EVENTS_IN_0); // clear
-    nrf_drv_gpiote_in_event_enable(MAGN_VALID_PIN, true); // Enable
-}
-
-/**
- * @brief Function for configuring: PIN_IN pin for input, PIN_OUT pin for output,
- * and configures GPIOTE to give an interrupt on pin change.
- */
-static void gpio_init(void)
-{
-    ret_code_t err_code;
-
-    err_code = nrf_drv_gpiote_init();
-    APP_ERROR_CHECK(err_code);
-
-    nrf_drv_gpiote_in_config_t magn_valid_pin_config = GPIOTE_CONFIG_IN_SENSE_LOTOHI(true);
-    magn_valid_pin_config.pull = NRF_GPIO_PIN_NOPULL;
-
-    err_code = nrf_drv_gpiote_in_init(MAGN_VALID_PIN, &magn_valid_pin_config, magn_vadid_handler);
-    APP_ERROR_CHECK(err_code);
-}
 
 /**@brief Function for the GAP initialization.
  *
@@ -221,8 +195,7 @@ static void gap_params_init(void)
 /**@snippet [Handling the data received over BLE] */
 static void nus_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t length)
 {
-
-    NRF_LOG_INFO("received %x\r\n", p_data[0]);
+    NRF_LOG_HEXDUMP_INFO(p_data, length);
     if(p_data[0] == '1')
     {
         ble_spi_done = true;
@@ -674,6 +647,30 @@ static void power_manage(void)
     APP_ERROR_CHECK(err_code);
 }
 
+void magn_vadid_handler(nrf_drv_gpiote_pin_t pin, nrf_gpiote_polarity_t action)
+{
+    // Disable 
+    nrf_drv_gpiote_in_event_disable(MAGN_VALID_PIN);
+    sample = true;
+    // Clear
+    nrf_gpiote_event_clear(NRF_GPIOTE_EVENTS_IN_0);
+    // Enable
+    nrf_drv_gpiote_in_event_enable(MAGN_VALID_PIN, true);
+}
+
+static void gpio_init(void)
+{
+    ret_code_t err_code;
+
+    err_code = nrf_drv_gpiote_init();
+    APP_ERROR_CHECK(err_code);
+
+    nrf_drv_gpiote_in_config_t magn_valid_pin_config = GPIOTE_CONFIG_IN_SENSE_LOTOHI(true);
+    magn_valid_pin_config.pull = NRF_GPIO_PIN_NOPULL;
+
+    err_code = nrf_drv_gpiote_in_init(MAGN_VALID_PIN, &magn_valid_pin_config, magn_vadid_handler);
+    APP_ERROR_CHECK(err_code);
+}
 
 /**@brief Application main function.
  */
@@ -682,8 +679,9 @@ int main(void)
     uint32_t err_code;
     bool     erase_bonds;
 
-    cc1200_init();
+    cc1200_init(); // Initialize cc1200
     gpio_init();
+
     // Initialize.
     err_code = app_timer_init();
     APP_ERROR_CHECK(err_code);
@@ -698,45 +696,38 @@ int main(void)
     advertising_init();
     conn_params_init();
 
-    //printf("\r\nUART Start!\r\n");
-    //NRF_LOG_INFO("UART Start!\r\n");
     err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
     APP_ERROR_CHECK(err_code);
 
-    
     cc1200_write_reg_settings(CC1200_RF_CFG.register_settings, CC1200_RF_CFG.size_of_register_settings);
-    //uint8_t status;
-    //uint8_t rxbytes;
+    nrf_gpiote_event_clear(NRF_GPIOTE_EVENTS_IN_0); // Clear
+    nrf_drv_gpiote_in_event_enable(MAGN_VALID_PIN, true); // Enable interrupt
 
-    // Clear
-    nrf_gpiote_event_clear(NRF_GPIOTE_EVENTS_IN_0);
-
-    // Enable interrupt
-    nrf_drv_gpiote_in_event_enable(MAGN_VALID_PIN, true);
 
     NRF_LOG_INFO("RX Mode!\r\n");
-
     cc1200_cmd_strobe(CC1200_SRX);
     // Enter main loop.
     for (;;)
     {
         while(ble_spi_done)
         {
-            while(!sample){};
-            sample = false;
-            cc1200_burst_read_register(CC1200_MAGN2, spimsg, 5);
-            NRF_LOG_HEXDUMP_INFO(spimsg, 5); 
-            //NRF_LOG_FLUSH();
-
-            do
+            if(sample)
             {
-                err_code = ble_nus_string_send(&m_nus,spimsg,5);
-                if ( (err_code != NRF_SUCCESS) && (err_code != NRF_ERROR_BUSY) )
+                sample = false;
+                cc1200_burst_read_register(CC1200_MAGN2, spimsg, 5);
+                NRF_LOG_HEXDUMP_INFO(spimsg, 5);
+                NRF_LOG_FLUSH();
+                nrf_delay_ms(100);
+                do
                 {
-                    APP_ERROR_CHECK(err_code);
-                }
-            } while (err_code == NRF_ERROR_BUSY);
+                    err_code = ble_nus_string_send(&m_nus,spimsg,5);
+                    if ( (err_code != NRF_SUCCESS) && (err_code != NRF_ERROR_BUSY) )
+                    {
+                        APP_ERROR_CHECK(err_code);
+                    }
+                } while (err_code == NRF_ERROR_BUSY);
 
+            }
         }
         power_manage();
     }
@@ -746,3 +737,4 @@ int main(void)
 /**
  * @}
  */
+

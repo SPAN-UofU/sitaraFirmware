@@ -285,6 +285,7 @@ int cc1200_read_rxfifo(uint8_t *data, uint8_t len)
 	return ret;
 }
 
+
 int cc1200_init(void)
 {      
 	
