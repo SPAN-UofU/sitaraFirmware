@@ -131,12 +131,13 @@ static uint16_t                         m_ble_nus_max_data_len = BLE_GATT_ATT_MT
 extern const cc1200_rf_cfg_t CC1200_RF_CFG;
 #define CC1200_RF_CFG cc1200_802154g_434mhz_2gfsk_50kbps_cw
 
-static volatile bool ble_spi_done;
+static volatile bool ble_spi_rx = false;
+static volatile bool ble_spi_tx = false;
 uint8_t spimsg[10] = {0};
 uint8_t sample = false;
 uint32_t total_mag[8] = {0};
 uint8_t final_msg[20] = {};
-//uint8_t tx_msg[] = {0x18, /*0, 0, 5, 6, 8, 6};//*/'T', 49, 'C', 'C', '1', '2', '0', '0', 'A', 'L'};
+uint8_t cmd_ack[] = {'c','m','d',' ','a','c','k'};
 
 /**@brief Function for assert macro callback.
  *
@@ -198,20 +199,26 @@ static void gap_params_init(void)
 static void nus_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t length)
 {
     NRF_LOG_HEXDUMP_INFO(p_data, length);
-    //uint32_t err_code;
-
-    if(p_data[0] == '1')
+    if(p_data[0] == '1' && p_data[1] == '1')
     {
-        ble_spi_done = true;
+        ble_spi_rx = true;
+        ble_spi_tx = false;
+        //cc1200_cmd_strobe(CC1200_SRX);
+        //cc1200_cmd_strobe(CC1200_SFTX);
     }
 
-    if(p_data[0] == '0')
+    else if(p_data[0] == '0' && p_data[1] == '1')
     {
-        ble_spi_done = false;
-        //err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
-        //APP_ERROR_CHECK(err_code);
+        ble_spi_rx = false;
+        ble_spi_tx = true;
+        //cc1200_cmd_strobe(CC1200_SFRX);
+        //cc1200_cmd_strobe(CC1200_STX);
     }
-
+    else if(p_data[1] == '0')
+    {
+        ble_spi_rx = false;
+        ble_spi_tx = false;
+    }
 }
 /**@snippet [Handling the data received over BLE] */
 
@@ -674,17 +681,13 @@ static void gpio_init(void)
 int main(void)
 {
     uint32_t err_code;
-    bool     erase_bonds;
-
+    bool erase_bonds;
     cc1200_init(); // Initialize cc1200
     gpio_init();
-
     // Initialize.
     err_code = app_timer_init();
-    APP_ERROR_CHECK(err_code);
-    
+    APP_ERROR_CHECK(err_code);    
     log_init();
-
     buttons_leds_init(&erase_bonds);
     ble_stack_init();
     gap_params_init();
@@ -692,43 +695,42 @@ int main(void)
     services_init();
     advertising_init();
     conn_params_init();
-
     err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
     APP_ERROR_CHECK(err_code);
-
     cc1200_write_reg_settings(CC1200_RF_CFG.register_settings, CC1200_RF_CFG.size_of_register_settings);
     nrf_gpiote_event_clear(NRF_GPIOTE_EVENTS_IN_0); // Clear
     nrf_drv_gpiote_in_event_enable(MAGN_VALID_PIN, true); // Enable interrupt
-
-
-    NRF_LOG_INFO("RX Mode!\r\n");
     cc1200_cmd_strobe(CC1200_SRX);
     int i = 0;
     int average_mag = 0;
     // Enter main loop.
     for (;;)
     {
-        while(ble_spi_done)
-        {   
+        if(ble_spi_rx)
+        {
+            NRF_LOG_INFO("RX Mode\r\n");
+            NRF_LOG_FLUSH();
+            cc1200_cmd_strobe(CC1200_SRX);
+            ble_nus_string_send(&m_nus,cmd_ack,ARR_SIZE(cmd_ack));
+        }
+        while(ble_spi_rx)
+        {       
             if(sample)
             {
                 memset(spimsg,0,sizeof(spimsg));
                 sample = false;
                 cc1200_burst_read_register(CC1200_MAGN2, spimsg, 5);
-                cc1200_cmd_strobe(CC1200_SFRX);
                 NRF_LOG_HEXDUMP_INFO(spimsg, 5);
                 NRF_LOG_FLUSH();
-                nrf_delay_ms(10);
+                //nrf_delay_ms(7);
+                NRF_LOG_INFO("%d\r\n",i);
                 total_mag[i] = ((spimsg[0]<<16)&0xFF0000) + ((spimsg[1]<<8)&0x00FF00) + (spimsg[2]&0x0000FF);
                 final_msg[i+4] = spimsg[2];
                 final_msg[i+12] = spimsg[4];
                 average_mag +=  total_mag[i];
-                //NRF_LOG_INFO("total_mag %x\r\n", total_mag[i]);
-                //NRF_LOG_FLUSH();
                 i++;
-                if(total_mag[7]!=0)
+                if(i == 8)
                 {
-                    NRF_LOG_INFO("in if\r\n");
                     i = 0;
                     average_mag = average_mag/ARR_SIZE(total_mag);
                     for(int k=0; k<8; k++)
@@ -759,11 +761,38 @@ int main(void)
                     memset(total_mag,0,sizeof(total_mag));
                     memset(final_msg,0, sizeof(final_msg));
                 }
-                cc1200_cmd_strobe(CC1200_SRX);
-
             }
         }
-        power_manage();
+        if(ble_spi_tx)
+        {
+            NRF_LOG_INFO("TX Mode\r\n");
+            NRF_LOG_FLUSH();
+            cc1200_cmd_strobe(CC1200_STX);
+            ble_nus_string_send(&m_nus,cmd_ack,ARR_SIZE(cmd_ack));
+            i = 0;
+            average_mag = 0;
+            memset(spimsg,0,sizeof(spimsg));
+            memset(total_mag,0,sizeof(total_mag));
+            memset(final_msg,0, sizeof(final_msg));
+
+        }
+        while(ble_spi_tx);
+
+        if(!ble_spi_rx && !ble_spi_tx)
+        {
+            NRF_LOG_INFO("power saving mode\r\n");
+            NRF_LOG_FLUSH();
+            i = 0;
+            average_mag = 0;
+            memset(spimsg,0,sizeof(spimsg));
+            memset(total_mag,0,sizeof(total_mag));
+            memset(final_msg,0, sizeof(final_msg));
+        }
+        while(!ble_spi_rx && !ble_spi_tx)
+        {
+            power_manage();
+
+        }
     }
 }
 
