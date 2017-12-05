@@ -78,7 +78,7 @@ void magn_vadid_handler(nrf_drv_gpiote_pin_t pin, nrf_gpiote_polarity_t action)
 	// Handle
     // NRF_LOG_INFO("MAGN_VALID!\r\n");
 	// uint8_t spimsg[5] = {0};
-	// cc1200_burst_read_register(CC1200_MAGN2, spimsg, 5);
+	//cc1200_burst_read_register(CC1200_MAGN2, spimsg, 5);
 	// cc1200_read_register(CC1200_MAGN2, &test);
 	// NRF_LOG_INFO("MAGN_VALID! %d\r\n", test++);
 	// spimsg[0] = 0xDE;

@@ -25,7 +25,7 @@ int cc1200_cmd_strobe(uint8_t cmd);
 int cc1200_get_status(uint8_t *status);
 int cc1200_write_register(uint16_t reg, uint8_t value);
 void cc1200_write_reg_settings(const registerSetting_t *reg_settings,
-		uint16_t sizeof_reg_settings);
+uint16_t sizeof_reg_settings);
 int cc1200_read_register(uint16_t reg, uint8_t *data);
 int cc1200_write_txfifo(uint8_t *data, uint8_t len);
 int cc1200_read_rxfifo(uint8_t *data, uint8_t len);
