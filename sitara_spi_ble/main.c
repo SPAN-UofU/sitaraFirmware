@@ -1,3 +1,4 @@
+
 /**
  * Copyright (c) 2014 - 2017, Nordic Semiconductor ASA
  * 
@@ -105,19 +106,13 @@
 #define FIRST_CONN_PARAMS_UPDATE_DELAY  APP_TIMER_TICKS(5000)                       /**< Time from initiating event (connect or start of notification) to first time sd_ble_gap_conn_param_update is called (5 seconds). */
 #define NEXT_CONN_PARAMS_UPDATE_DELAY   APP_TIMER_TICKS(30000)                      /**< Time between each call to sd_ble_gap_conn_param_update after the first call (30 seconds). */
 #define MAX_CONN_PARAMS_UPDATE_COUNT    3                                           /**< Number of attempts before giving up the connection parameter negotiation. */
-
 #define DEAD_BEEF                       0xDEADBEEF                                  /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
-
-//#define UART_TX_BUF_SIZE                256                                         /**< UART TX buffer size. */
-//#define UART_RX_BUF_SIZE                256                                         /**< UART RX buffer size. */
 
 static ble_nus_t                        m_nus;                                      /**< Structure to identify the Nordic UART Service. */
 static uint16_t                         m_conn_handle = BLE_CONN_HANDLE_INVALID;    /**< Handle of the current connection. */
-
 static nrf_ble_gatt_t                   m_gatt;                                     /**< GATT module instance. */
 static ble_uuid_t                       m_adv_uuids[] = {{BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}};  /**< Universally unique service identifier. */
 static uint16_t                         m_ble_nus_max_data_len = BLE_GATT_ATT_MTU_DEFAULT - 3;  /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Nordic UART service module. */
-
 
 #define ARR_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 #define MAGN_VALID_PIN NRF_GPIO_PIN_MAP(1,15)
@@ -130,11 +125,12 @@ static uint16_t                         m_ble_nus_max_data_len = BLE_GATT_ATT_MT
 extern const cc1200_rf_cfg_t CC1200_RF_CFG;
 #define CC1200_RF_CFG cc1200_802154g_434mhz_2gfsk_50kbps_cw
 
-static volatile bool ble_spi_done;
+static volatile bool ble_spi_rx;
+static volatile bool ble_spi_tx;
 uint8_t spimsg[10] = {0};
 uint8_t sample = false;
 
-//uint8_t tx_msg[] = {0x18, /*0, 0, 5, 6, 8, 6};//*/'T', 49, 'C', 'C', '1', '2', '0', '0', 'A', 'L'};
+uint8_t cmd_ack[] = {'c','m','d',' ','a','c','k'};
 
 /**@brief Function for assert macro callback.
  *
@@ -196,14 +192,25 @@ static void gap_params_init(void)
 static void nus_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t length)
 {
     NRF_LOG_HEXDUMP_INFO(p_data, length);
-    if(p_data[0] == '1')
+    if(p_data[0] == '1' && p_data[1] == '1')
     {
-        ble_spi_done = true;
+        ble_spi_rx = true;
+        ble_spi_tx = false;
+        //cc1200_cmd_strobe(CC1200_SRX);
+        //cc1200_cmd_strobe(CC1200_SFTX);
     }
 
-    if(p_data[0] == '0')
+    else if(p_data[0] == '0' && p_data[1] == '1')
     {
-        ble_spi_done = false;
+        ble_spi_rx = false;
+        ble_spi_tx = true;
+        //cc1200_cmd_strobe(CC1200_SFRX);
+        //cc1200_cmd_strobe(CC1200_STX);
+    }
+    else if(p_data[1] == '0')
+    {
+        ble_spi_rx = false;
+        ble_spi_tx = false;
     }
 
 }
@@ -677,17 +684,13 @@ static void gpio_init(void)
 int main(void)
 {
     uint32_t err_code;
-    bool     erase_bonds;
-
+    bool erase_bonds;
     cc1200_init(); // Initialize cc1200
     gpio_init();
-
     // Initialize.
     err_code = app_timer_init();
     APP_ERROR_CHECK(err_code);
-    
     log_init();
-
     buttons_leds_init(&erase_bonds);
     ble_stack_init();
     gap_params_init();
@@ -695,21 +698,23 @@ int main(void)
     services_init();
     advertising_init();
     conn_params_init();
-
     err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
     APP_ERROR_CHECK(err_code);
-
     cc1200_write_reg_settings(CC1200_RF_CFG.register_settings, CC1200_RF_CFG.size_of_register_settings);
     nrf_gpiote_event_clear(NRF_GPIOTE_EVENTS_IN_0); // Clear
     nrf_drv_gpiote_in_event_enable(MAGN_VALID_PIN, true); // Enable interrupt
-
-
-    NRF_LOG_INFO("RX Mode!\r\n");
     cc1200_cmd_strobe(CC1200_SRX);
     // Enter main loop.
     for (;;)
     {
-        while(ble_spi_done)
+        if(ble_spi_rx)
+        {
+            NRF_LOG_INFO("RX Mode\r\n");
+            NRF_LOG_FLUSH();
+            cc1200_cmd_strobe(CC1200_SRX);
+            ble_nus_string_send(&m_nus,cmd_ack,ARR_SIZE(cmd_ack));
+        }
+        while(ble_spi_rx)
         {
             if(sample)
             {
@@ -717,7 +722,7 @@ int main(void)
                 cc1200_burst_read_register(CC1200_MAGN2, spimsg, 5);
                 NRF_LOG_HEXDUMP_INFO(spimsg, 5);
                 NRF_LOG_FLUSH();
-                nrf_delay_ms(100);
+                nrf_delay_ms(7);
                 do
                 {
                     err_code = ble_nus_string_send(&m_nus,spimsg,5);
@@ -729,12 +734,25 @@ int main(void)
 
             }
         }
-        power_manage();
+        if(ble_spi_tx)
+        {
+            NRF_LOG_INFO("TX Mode\r\n");
+            NRF_LOG_FLUSH();
+            cc1200_cmd_strobe(CC1200_STX);
+            ble_nus_string_send(&m_nus,cmd_ack,ARR_SIZE(cmd_ack));
+        }
+        while(ble_spi_tx);
+
+        if(!ble_spi_rx && !ble_spi_tx)
+        {
+            NRF_LOG_INFO("power saving mode\r\n");
+            NRF_LOG_FLUSH();
+        }
+        while(!ble_spi_rx && !ble_spi_tx)
+        {
+            power_manage();
+        }
     }
 }
 
-
-/**
- * @}
- */
 

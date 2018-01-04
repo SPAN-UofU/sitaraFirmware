@@ -27,7 +27,7 @@
 /* Defines and register set */
 #include "cc1200-const.h"
 #include "cc1200-rf-cfg.h"
-#include "cc1200-802154g-434mhz-2gfsk-50kbps.h"
+#include "cc1200-802154g-868mhz-2gfsk-50kbps.h"
 #include "cc1200.h"
 
 #include "nrf_drv_spi.h"
@@ -55,7 +55,7 @@
 /* Import the rf configuration set by CC1200_RF_CFG */
 
 extern const cc1200_rf_cfg_t CC1200_RF_CFG;
-#define CC1200_RF_CFG cc1200_802154g_434mhz_2gfsk_50kbps
+#define CC1200_RF_CFG cc1200_802154g_868mhz_2gfsk_50kbps
 
 
 uint8_t tx_msg[] = {0x18, 0, 0, 'T', 'I', 'C', 'C', '1', '2', '0', '0', 'A', 'L'};

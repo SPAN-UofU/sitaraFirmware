@@ -31,7 +31,7 @@
 /******************************************************************************
  * Local Macro Declarations                                                    * 
  ******************************************************************************/
-extern  ble_nus_t m_nus;                                      /**< Structure to identify the Nordic UART Service. */
+// static ble_nus_t f_nus;                                      /**< Structure to identify the Nordic UART Service. */
 
 // SPI for NRF
 #define SPI_INSTANCE  0 /**< SPI instance index. */
@@ -51,67 +51,68 @@ uint8_t err_code;
 int packet;
 int temp;
 extern uint8_t spimsg[10];
-static int ble_data_queue(uint8_t *final_msg,uint8_t*spimsg)
-{
-    total_mag[index] = ((spimsg[0]<<16)&0xFF0000) + ((spimsg[1]<<8)&0x00FF00) + (spimsg[2]&0x0000FF);
-    final_msg[index+4] = spimsg[2];
-    final_msg[index+12] = spimsg[4];
-    average_mag +=  total_mag[index];
-    index++;
-    if(index == 8)
-    {
-    	temp = index;
-        index = 0;
-        average_mag = average_mag/ARR_SIZE(total_mag);
-        for(int k=0; k<8; k++)
-        {
-            if(CHECK_BIT(average_mag+(total_mag[k]&0x000000FF),17))
-            {
-                average_mag |= 1<<(k+18);
-                //NRF_LOG_INFO("check\r\n");
-            }                   
-        }
-        //NRF_LOG_INFO("avg %x\r\n",average_mag);
-        //NRF_LOG_FLUSH();
-        final_msg[0] = (average_mag >> 24) & 0xff;  // overflow 7 bits(lower 7), reserved
-        final_msg[1] = (average_mag >> 16) & 0xff; // average magnitude 1 bit(bit 0), overflow 7 bits
-        final_msg[2] = (average_mag >> 8) & 0xff; // average magnitude
-        final_msg[3] = (average_mag) & 0xff; // average magnitude
-        average_mag = 0;
-        memset(total_mag,0,sizeof(total_mag));
-		NRF_LOG_HEXDUMP_INFO(final_msg, 20);
-		return temp;
-		//nrf_delay_ms(2000);
-    }
-    return index;        
-}
+// static int ble_data_queue(uint8_t *final_msg,uint8_t*spimsg)
+// {
+//     total_mag[index] = ((spimsg[0]<<16)&0xFF0000) + ((spimsg[1]<<8)&0x00FF00) + (spimsg[2]&0x0000FF);
+//     final_msg[index+4] = spimsg[2];
+//     final_msg[index+12] = spimsg[4];
+//     average_mag +=  total_mag[index];
+//     index++;
+//     if(index == 8)
+//     {
+//     	temp = index;
+//         index = 0;
+//         average_mag = average_mag/ARR_SIZE(total_mag);
+//         for(int k=0; k<8; k++)
+//         {
+//             if(CHECK_BIT(average_mag+(total_mag[k]&0x000000FF),17))
+//             {
+//                 average_mag |= 1<<(k+18);
+//                 //NRF_LOG_INFO("check\r\n");
+//             }                   
+//         }
+//         //NRF_LOG_INFO("avg %x\r\n",average_mag);
+//         //NRF_LOG_FLUSH();
+//         final_msg[0] = (average_mag >> 24) & 0xff;  // overflow 7 bits(lower 7), reserved
+//         final_msg[1] = (average_mag >> 16) & 0xff; // average magnitude 1 bit(bit 0), overflow 7 bits
+//         final_msg[2] = (average_mag >> 8) & 0xff; // average magnitude
+//         final_msg[3] = (average_mag) & 0xff; // average magnitude
+//         average_mag = 0;
+//         memset(total_mag,0,sizeof(total_mag));
+// 		NRF_LOG_HEXDUMP_INFO(final_msg, 20);
+// 		// err_code = ble_nus_string_send(&f_nus,final_msg,20);
+// 		return temp;
+// 		//nrf_delay_ms(2000);
+//     }
+//     return index;        
+// }
 
 void spi_event_handler(nrf_drv_spi_evt_t const * p_event, void *p_context)
 {
     spi_xfer_done = true;
   	//NRF_LOG_INFO("Transfer completed.\r\n");
-    if (sample == true){
-    	sample = false;
-		NRF_LOG_HEXDUMP_INFO(spimsg, 5);
-		packet = ble_data_queue(transfer_msg,spimsg);
-		NRF_LOG_INFO("in spi_event_handler\r\n");
-		if (packet == 8){
-			NRF_LOG_INFO("in ble send\r\n");
-			// nrf_delay_ms(2000);
-		// err_code = ble_nus_string_send(&m_nus,transfer_msg,20);}
+  //   if (sample){
+  //   	sample = false;
+		// NRF_LOG_HEXDUMP_INFO(spimsg, 5);
+		// packet = ble_data_queue(transfer_msg,spimsg);
+		// // NRF_LOG_INFO("in spi_event_handler\r\n");
+		// // if (packet == 8){
+		// // 	// NRF_LOG_INFO("in ble send\r\n");
+		// // 	// nrf_delay_ms(2000);
+		// // 	err_code = ble_nus_string_send(&f_nus,transfer_msg,20);}
 
-        do
-        {
-            err_code = ble_nus_string_send(&m_nus, transfer_msg,20);
-            if ( (err_code != NRF_ERROR_INVALID_STATE) && (err_code != NRF_ERROR_BUSY))
-            {
-                APP_ERROR_CHECK(err_code);
-            }
-        } while (err_code == NRF_ERROR_BUSY);
-  		//NRF_LOG_FLUSH();
-  		}
+  // //       // do
+  // //       // {
+  // //       //     err_code = ble_nus_string_send(&f_nus, transfer_msg,20);
+  // //       //     if ( (err_code != NRF_ERROR_INVALID_STATE) && (err_code != NRF_ERROR_BUSY))
+  // //       //     {
+  // //       //         APP_ERROR_CHECK(err_code);
+  // //       //     }
+  // //       // } while (err_code == NRF_ERROR_BUSY);
+  // // 		//NRF_LOG_FLUSH();
+  // // 		// }
 
-    }
+  //   }
 }
 
 int cc1200_cmd_strobe(uint8_t cmd)

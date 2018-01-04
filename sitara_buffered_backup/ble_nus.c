@@ -52,8 +52,12 @@
 
 #define NUS_BASE_UUID                  {{0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xA9, 0xE0, 0x93, 0xF3, 0xA3, 0xB5, 0x00, 0x00, 0x40, 0x6E}} /**< Used vendor specific UUID. */
 
+// #define NRF_LOG_MODULE_NAME "APP"
 #include "nrf_log.h"
+// #include "nrf_log_ctrl.h"
 
+
+extern uint8_t ble_spi_rx;
 volatile uint32_t file_size = 0, file_pos = 0, m_max_data_length = 20;
 uint8_t * file_data;
 ble_nus_t *m_nus;
@@ -235,35 +239,36 @@ static uint32_t push_data_packets()
 {
     uint32_t return_code = NRF_SUCCESS;
     uint32_t packet_length = m_max_data_length;
-    while(return_code == NRF_SUCCESS)
-    {
-        if((file_size - file_pos) > packet_length)
-        {
+    // while(return_code == NRF_SUCCESS)
+    // {
+        // if((file_size - file_pos) > packet_length)
+        // {
             return_code = ble_nus_string_send(m_nus, &file_data[file_pos], packet_length);
             if(return_code == NRF_SUCCESS)
             {
                 file_pos += packet_length;
             }
-        }
-        else if((file_size - file_pos) > 0)
-        {
-            return_code = ble_nus_string_send(m_nus, &file_data[file_pos], file_size - file_pos);           
-            if(return_code == NRF_SUCCESS)
-            {
-                file_pos = file_size;
-            }
-        }
-        else
-        {
-            file_size = 0;
-            break;
-        }
-    }
+        // }
+        // else if((file_size - file_pos) > 0)
+        // {
+        //     return_code = ble_nus_string_send(m_nus, &file_data[file_pos], file_size - file_pos);           
+        //     if(return_code == NRF_SUCCESS)
+        //     {
+        //         file_pos = file_size;
+        //     }
+        // }
+        // else
+        // {
+        //     file_size = 0;
+        //     break;
+        // }
+    // }
     return return_code;
 }
 
 void ble_nus_on_ble_evt(ble_nus_t * p_nus, ble_evt_t * p_ble_evt)
 {
+
     if ((p_nus == NULL) || (p_ble_evt == NULL))
     {
         return;
@@ -283,10 +288,14 @@ void ble_nus_on_ble_evt(ble_nus_t * p_nus, ble_evt_t * p_ble_evt)
             on_write(p_nus, p_ble_evt);
             break;
         case BLE_GATTS_EVT_HVN_TX_COMPLETE:
-            if(file_size > 0)
-            {
+            // NRF_LOG_INFO("IN EVENT\r\n");
+            // NRF_LOG_FLUSH();
+            // if(file_size > 0)
+            // {
+            if (ble_spi_rx){
                 push_data_packets();
             }
+            // }
             break;            
         default:
             // No implementation needed.
@@ -386,7 +395,8 @@ uint32_t ble_nus_ble_params_info_send(ble_nus_t * p_nus, ble_nus_ble_params_info
 
     return sd_ble_gatts_hvx(p_nus->conn_handle, &hvx_params);     
 }
-uint32_t ble_nus_send_data(ble_nus_t * p_nus, uint8_t * p_data, uint32_t data_length, uint32_t max_packet_length)
+uint32_t ble_nus_send_data(ble_nus_t * p_nus, uint8_t * p_data,
+ uint32_t max_packet_length)
 {
     uint32_t err_code; 
     
@@ -395,12 +405,12 @@ uint32_t ble_nus_send_data(ble_nus_t * p_nus, uint8_t * p_data, uint32_t data_le
         return NRF_ERROR_INVALID_STATE;
     } 
     
-    if(file_size != 0)
-    {
-        return NRF_ERROR_BUSY;
-    }
+    // if(file_size != 0)
+    // {
+    //     return NRF_ERROR_BUSY;
+    // }
     
-    file_size = data_length;
+    // file_size = data_length;
     file_pos = 0;
     file_data = p_data;
     m_max_data_length = max_packet_length;
@@ -410,5 +420,4 @@ uint32_t ble_nus_send_data(ble_nus_t * p_nus, uint8_t * p_data, uint32_t data_le
     if(err_code == NRF_ERROR_RESOURCES) return NRF_SUCCESS;
     return err_code;
 }
-
 #endif // NRF_MODULE_ENABLED(BLE_NUS)

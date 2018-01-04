@@ -33,7 +33,8 @@
 // SPI for NRF
 #define SPI_INSTANCE  0 /**< SPI instance index. */
 static const nrf_drv_spi_t spi = NRF_DRV_SPI_INSTANCE(SPI_INSTANCE);
- 
+extern uint8_t spimsg[10];
+
 uint8_t tx_buf[128] = {0};
 uint8_t rx_buf[128] = {0};
 static volatile bool spi_xfer_done;
@@ -41,6 +42,8 @@ static volatile bool spi_xfer_done;
 void spi_event_handler(nrf_drv_spi_evt_t const * p_event, void *p_context)
 {
     spi_xfer_done = true;
+	// NRF_LOG_HEXDUMP_INFO(spimsg, 5);
+	// NRF_LOG_FLUSH();
   	// NRF_LOG_INFO("Transfer completed.\r\n");
 }
 

@@ -672,8 +672,8 @@ int main(void)
 
     cc1200_init();
     cc1200_write_reg_settings(CC1200_RF_CFG.register_settings, CC1200_RF_CFG.size_of_register_settings);
-    uint8_t status;
-    uint8_t rxbytes;
+    //uint8_t status;
+    //uint8_t rxbytes;
 
     NRF_LOG_INFO("RX Mode!\r\n");
     printf("\r\n RX MODE \r\n");
@@ -683,8 +683,18 @@ int main(void)
     {
         while(ble_spi_done)
         {
-            
-            uint8_t rx_msg[ARRAY_SIZE(tx_msg)] = {0, };
+           
+            do
+            {
+                err_code = ble_nus_string_send(&m_nus,tx_msg,11);
+                if ( (err_code != NRF_SUCCESS) && (err_code != NRF_ERROR_BUSY) )
+                {
+                    APP_ERROR_CHECK(err_code);
+                }
+            } while (err_code == NRF_ERROR_BUSY);
+            NRF_LOG_HEXDUMP_INFO(tx_msg,12);
+            nrf_delay_ms(50);
+            /*uint8_t rx_msg[ARRAY_SIZE(tx_msg)] = {0, };
             cc1200_read_register(CC1200_MARC_STATUS1, &status);
             if(status == CC1200_MARC_STATUS1_RX_SUCCEED)
             {
@@ -702,14 +712,7 @@ int main(void)
                         cc1200_read_rxfifo(rx_msg, rx_fifo_bytes);
                         NRF_LOG_INFO("MSG Received! DATA: ");
 
-                        do
-                        {
-                            err_code = ble_nus_string_send(&m_nus,rx_msg,rx_fifo_bytes);
-                            if ( (err_code != NRF_SUCCESS) && (err_code != NRF_ERROR_BUSY) )
-                            {
-                                APP_ERROR_CHECK(err_code);
-                            }
-                        } while (err_code == NRF_ERROR_BUSY);
+
 
                         if(rx_msg != 0)
                         {
@@ -720,7 +723,7 @@ int main(void)
                     }
                 }
                 cc1200_cmd_strobe(CC1200_SRX); 
-            }
+            }*/
         }
         power_manage();
     }

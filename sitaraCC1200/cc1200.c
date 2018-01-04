@@ -42,6 +42,7 @@ void spi_event_handler(nrf_drv_spi_evt_t const * p_event, void *p_context)
 {
     spi_xfer_done = true;
   	//NRF_LOG_INFO("Transfer completed.\r\n");
+
 }
 
 int cc1200_cmd_strobe(uint8_t cmd)

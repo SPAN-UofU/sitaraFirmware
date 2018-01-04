@@ -59,7 +59,7 @@
 #include "cc1200-const.h"
 #include "cc1200-rf-cfg.h"
 #include "cc1200-802154g-434mhz-2gfsk-50kbps-cw.h"
-
+#include <math.h>
 #include "cc1200.h"
 #include "nrf_drv_spi.h"
 #include "nordic_common.h"
@@ -96,14 +96,14 @@
 #define NUS_SERVICE_UUID_TYPE           BLE_UUID_TYPE_VENDOR_BEGIN                  /**< UUID type for the Nordic UART Service (vendor specific). */
 
 #define APP_ADV_INTERVAL                64                                          /**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
-#define APP_ADV_TIMEOUT_IN_SECONDS      180                                         /**< The advertising timeout (in units of seconds). */
+#define APP_ADV_TIMEOUT_IN_SECONDS      0                                         /**< The advertising timeout (in units of seconds). */
 
-#define MIN_CONN_INTERVAL               MSEC_TO_UNITS(20, UNIT_1_25_MS)             /**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
-#define MAX_CONN_INTERVAL               MSEC_TO_UNITS(75, UNIT_1_25_MS)             /**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
+#define MIN_CONN_INTERVAL               MSEC_TO_UNITS(7.5, UNIT_1_25_MS)             /**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
+#define MAX_CONN_INTERVAL               MSEC_TO_UNITS(15, UNIT_1_25_MS)             /**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
 #define SLAVE_LATENCY                   0                                           /**< Slave latency. */
-#define CONN_SUP_TIMEOUT                MSEC_TO_UNITS(4000, UNIT_10_MS)             /**< Connection supervisory timeout (4 seconds), Supervision Timeout uses 10 ms units. */
-#define FIRST_CONN_PARAMS_UPDATE_DELAY  APP_TIMER_TICKS(5000)                       /**< Time from initiating event (connect or start of notification) to first time sd_ble_gap_conn_param_update is called (5 seconds). */
-#define NEXT_CONN_PARAMS_UPDATE_DELAY   APP_TIMER_TICKS(30000)                      /**< Time between each call to sd_ble_gap_conn_param_update after the first call (30 seconds). */
+#define CONN_SUP_TIMEOUT                MSEC_TO_UNITS(300, UNIT_10_MS)             /**< Connection supervisory timeout (4 seconds), Supervision Timeout uses 10 ms units. */
+#define FIRST_CONN_PARAMS_UPDATE_DELAY  APP_TIMER_TICKS(1000)                       /**< Time from initiating event (connect or start of notification) to first time sd_ble_gap_conn_param_update is called (5 seconds). */
+#define NEXT_CONN_PARAMS_UPDATE_DELAY   APP_TIMER_TICKS(5000)                      /**< Time between each call to sd_ble_gap_conn_param_update after the first call (30 seconds). */
 #define MAX_CONN_PARAMS_UPDATE_COUNT    3                                           /**< Number of attempts before giving up the connection parameter negotiation. */
 
 #define DEAD_BEEF                       0xDEADBEEF                                  /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
@@ -116,13 +116,19 @@ static uint16_t                         m_conn_handle = BLE_CONN_HANDLE_INVALID;
 
 static nrf_ble_gatt_t                   m_gatt;                                     /**< GATT module instance. */
 static ble_uuid_t                       m_adv_uuids[] = {{BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}};  /**< Universally unique service identifier. */
-static uint16_t                         m_ble_nus_max_data_len = BLE_GATT_ATT_MTU_DEFAULT - 3;  /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Nordic UART service module. */
+static uint16_t  m_ble_nus_max_data_len = BLE_GATT_ATT_MTU_DEFAULT - 3;  /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Nordic UART service module. */
 
 
 #define ARR_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 #define MAGN_VALID_PIN NRF_GPIO_PIN_MAP(1,15)
 #define CHECK_BIT(var,pos) ((var) & (1<<(pos)))
-
+#define FREQ_DIVIDER 1000
+#define FREQ_MULTIPLIER 6826.67
+/*
+ * Divider + multiplier for calculation of FREQ registers
+ * f * 2^16 * 4 / 40000 = f * 2^12 / 625 (no overflow up to frequencies of
+ * 1048.576 MHz using uint32_t)
+ */
 /*---------------------------------------------------------------------------*/
 /* RF configuration */
 /*---------------------------------------------------------------------------*/
@@ -132,17 +138,50 @@ extern const cc1200_rf_cfg_t CC1200_RF_CFG;
 #define CC1200_RF_CFG cc1200_802154g_434mhz_2gfsk_50kbps_cw
 
 const nrf_drv_timer_t TIMER_BLE = NRF_DRV_TIMER_INSTANCE(1);
-uint32_t time_ms = 300000; //Time(in miliseconds) between consecutive compare events.
-
+uint32_t time_ms = 180000; //Time(in miliseconds) between consecutive compare events.
+//uint32_t time_ms = 50000;
 
 static volatile bool ble_spi_rx = false;
 static volatile bool ble_spi_tx = false;
 static volatile bool timer1_flag = false;
+static volatile bool chan_updated = false;
+static volatile bool chan_change = false;
 uint8_t spimsg[10] = {0};
 uint8_t sample = false;
 uint32_t total_mag[8] = {0};
 uint8_t final_msg[20] = {};
 uint8_t cmd_ack[] = {'c','m','d',' ','a','c','k'};
+int channel_number = 0;
+static int frequency_calc(int channel){
+    uint32_t frequency;
+    frequency = CC1200_RF_CFG.chan_center_freq0 + (channel * CC1200_RF_CFG.chan_spacing);
+    frequency *= FREQ_MULTIPLIER;
+    frequency /= FREQ_DIVIDER;
+    NRF_LOG_INFO("frequency is %d\r\n", frequency)
+    return frequency; 
+}
+
+static void set_rf_channel(int channel){
+    uint32_t freq;
+    NRF_LOG_INFO("Channel is %d\r\n",channel);
+    NRF_LOG_FLUSH();
+    if(channel < CC1200_RF_CFG.min_channel ||channel > CC1200_RF_CFG.max_channel) {
+        chan_updated = false; /* Invalid channel */        
+    }
+    else{
+        NRF_LOG_INFO("in freq update\r\n");
+        NRF_LOG_FLUSH();
+        freq = frequency_calc(channel - CC1200_RF_CFG.min_channel);
+        cc1200_write_register(CC1200_FREQ0,((uint8_t *)&freq)[0]);
+        cc1200_write_register(CC1200_FREQ1,((uint8_t *)&freq)[1]);
+        cc1200_write_register(CC1200_FREQ2,((uint8_t *)&freq)[2]);
+        chan_updated = true;
+    }
+}
+
+
+
+
 
 /**@brief Function for assert macro callback.
  *
@@ -168,7 +207,7 @@ void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
  */
 static void gap_params_init(void)
 {
-    uint32_t                err_code;
+    uint32_t err_code;
     ble_gap_conn_params_t   gap_conn_params;
     ble_gap_conn_sec_mode_t sec_mode;
 
@@ -206,32 +245,43 @@ static void nus_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t lengt
     NRF_LOG_HEXDUMP_INFO(p_data, length);
     if(p_data[0] == '1' && p_data[1] == '1')
     {
+        if(p_data[2] == '1'){
+            NRF_LOG_HEXDUMP_INFO(p_data, length);
+            p_data[2] = '0';
+            chan_change = true;
+            channel_number = (1000 * (p_data[3]-'0'))+(100*(p_data[4]-'0')) + (10*(p_data[5]-'0')) + (p_data[6]-'0');
+            memset(p_data,0,ARR_SIZE(p_data));
+        }
         ble_spi_rx = true;
         ble_spi_tx = false;
         timer1_flag = false;
-
-        //cc1200_cmd_strobe(CC1200_SRX);
-        //cc1200_cmd_strobe(CC1200_SFTX);
     }
 
     else if(p_data[0] == '0' && p_data[1] == '1')
     {
+        if(p_data[2] == '1'){
+            NRF_LOG_HEXDUMP_INFO(p_data, length);
+            p_data[2] = '0';
+            chan_change = true;
+            //NRF_LOG_INFO("is %d\r\n",(1000 * (p_data[3]-'0'))+(100*(p_data[4]-'0'))+(10*(p_data[5]-'0'))+(p_data[6]-'0'));
+            channel_number = (1000 * (p_data[3]-'0'))+(100*(p_data[4]-'0')) + (10*(p_data[5]-'0')) + (p_data[6]-'0');
+            memset(p_data,0,ARR_SIZE(p_data));
+
+            //NRF_LOG_INFO("channel_number in handler is %d\r\n",channel_number);         
+        }
         ble_spi_rx = false;
         ble_spi_tx = true;
         timer1_flag = false;
-
-        //cc1200_cmd_strobe(CC1200_SFRX);
-        //cc1200_cmd_strobe(CC1200_STX);
     }
     else if(p_data[0] == '1' && p_data[1] == '0'){
         if(ble_spi_tx){         
-        ble_spi_tx = false;
-        timer1_flag = true;
-        ble_spi_tx = true;}
+            ble_spi_tx = false;
+            timer1_flag = true;
+            ble_spi_tx = true;}
         if(ble_spi_rx){
-        ble_spi_rx = false;
-        timer1_flag = true;
-        ble_spi_rx = true;
+            ble_spi_rx = false;
+            timer1_flag = true;
+            ble_spi_rx = true;
         }
     }
     else if(p_data[1] == '0' && p_data[0] == '0')
@@ -239,7 +289,6 @@ static void nus_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t lengt
         ble_spi_rx = false;
         ble_spi_tx = false;
         timer1_flag = false;
-
     }
 }
 /**@snippet [Handling the data received over BLE] */
@@ -620,7 +669,7 @@ static void advertising_init(void)
     memset(&advdata, 0, sizeof(advdata));
     advdata.name_type          = BLE_ADVDATA_FULL_NAME;
     advdata.include_appearance = false;
-    advdata.flags              = BLE_GAP_ADV_FLAGS_LE_ONLY_LIMITED_DISC_MODE;
+    advdata.flags              = BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE;
 
     memset(&scanrsp, 0, sizeof(scanrsp));
     scanrsp.uuids_complete.uuid_cnt = sizeof(m_adv_uuids) / sizeof(m_adv_uuids[0]);
@@ -703,7 +752,7 @@ static void gpio_init(void)
 void set_timer(uint32_t timer_ms){
     nrf_drv_timer_disable(&TIMER_BLE);
     uint32_t time_ticks;
-    NRF_LOG_INFO("timer set\r\n");
+    //NRF_LOG_INFO("timer set\r\n");
     time_ticks = nrf_drv_timer_ms_to_ticks(&TIMER_BLE, timer_ms);
     nrf_drv_timer_extended_compare(
          &TIMER_BLE, NRF_TIMER_CC_CHANNEL0, time_ticks, NRF_TIMER_SHORT_COMPARE0_CLEAR_MASK, true);
@@ -718,7 +767,7 @@ void timer_ble_event_handler(nrf_timer_event_t event_type, void* p_context)
         case NRF_TIMER_EVENT_COMPARE0:
             ble_spi_rx = false;
             ble_spi_tx = false;
-            NRF_LOG_INFO("time up\r\n");
+            //NRF_LOG_INFO("time up\r\n");
             nrf_drv_timer_disable(&TIMER_BLE);
             break;
 
@@ -734,6 +783,8 @@ int main(void)
     uint32_t err_code;
     bool erase_bonds;
     cc1200_init(); // Initialize cc1200
+    uint8_t frequency[3] = {0};
+
     gpio_init();
     bsp_board_leds_init();
 
@@ -751,6 +802,9 @@ int main(void)
     err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
     APP_ERROR_CHECK(err_code);
     cc1200_write_reg_settings(CC1200_RF_CFG.register_settings, CC1200_RF_CFG.size_of_register_settings);
+    cc1200_burst_read_register(CC1200_FREQ2,frequency,3);
+    NRF_LOG_INFO("initial frequency is %d\r\n",(frequency[0]*1000000) + (frequency[1]*1000)+(frequency[2]));
+    NRF_LOG_FLUSH();
     nrf_gpiote_event_clear(NRF_GPIOTE_EVENTS_IN_0); // Clear
     nrf_drv_gpiote_in_event_enable(MAGN_VALID_PIN, true); // Enable interrupt
  //Configure TIMER_BLE for generating simple light effect - leds on board will invert his state one after the other.
@@ -765,21 +819,22 @@ int main(void)
     {
         if(ble_spi_rx)
         {
-            NRF_LOG_INFO("RX Mode\r\n");
-            NRF_LOG_FLUSH();
+
             cc1200_cmd_strobe(CC1200_SRX);
             ble_nus_string_send(&m_nus,cmd_ack,ARR_SIZE(cmd_ack));
             set_timer(time_ms);
-        
         }
         while(ble_spi_rx)
         {
             if(timer1_flag){
                 set_timer(time_ms);
                 timer1_flag =false;
-                NRF_LOG_INFO("refresh\r\n");
-                nrf_delay_ms(1000);
-            }       
+                //NRF_LOG_INFO("refresh\r\n");
+            }
+            if(chan_change){
+                chan_change = false;
+                set_rf_channel(channel_number);
+            }      
             if(sample)
             {
                 memset(spimsg,0,sizeof(spimsg));
@@ -788,7 +843,6 @@ int main(void)
                 NRF_LOG_HEXDUMP_INFO(spimsg, 5);
                 NRF_LOG_FLUSH();
                 //nrf_delay_ms(7);
-                NRF_LOG_INFO("%d\r\n",i);
                 total_mag[i] = ((spimsg[0]<<16)&0xFF0000) + ((spimsg[1]<<8)&0x00FF00) + (spimsg[2]&0x0000FF);
                 final_msg[i+4] = spimsg[2];
                 final_msg[i+12] = spimsg[4];
@@ -803,25 +857,26 @@ int main(void)
                         if(CHECK_BIT(average_mag+(total_mag[k]&0x000000FF),17))
                         {
                             average_mag |= 1<<(k+18);
-                            NRF_LOG_INFO("check\r\n");
+                            //NRF_LOG_INFO("check\r\n");
                         }                   
                     }
-                    NRF_LOG_INFO("avg %x\r\n",average_mag);
-                    NRF_LOG_FLUSH();
+                    //NRF_LOG_INFO("avg %x\r\n",average_mag);
+                    //NRF_LOG_FLUSH();
                     final_msg[0] = (average_mag >> 24) & 0xff;  // overflow 7 bits(lower 7), reserved
                     final_msg[1] = (average_mag >> 16) & 0xff; // average magnitude 1 bit(bit 0), overflow 7 bits
                     final_msg[2] = (average_mag >> 8) & 0xff; // average magnitude
                     final_msg[3] = (average_mag) & 0xff; // average magnitude
-                    NRF_LOG_HEXDUMP_INFO(final_msg,20);
-                    NRF_LOG_FLUSH();
+                    //NRF_LOG_HEXDUMP_INFO(final_msg,20);
+                    //NRF_LOG_FLUSH();
+                    for(int l = 0; l<4;l++){
                     do
                     {
                         err_code = ble_nus_string_send(&m_nus,final_msg,20);
-                        if ( (err_code != NRF_SUCCESS) && (err_code != NRF_ERROR_BUSY) )
-                        {
-                            APP_ERROR_CHECK(err_code);
-                        }
-                    } while (err_code == NRF_ERROR_BUSY);                                    
+                      //  if ( (err_code != NRF_SUCCESS) && (err_code != NRF_ERROR_BUSY) )
+                        //{
+                          //  APP_ERROR_CHECK(err_code);
+                    }
+                    while (err_code == NRF_ERROR_BUSY);}                             
                     average_mag = 0;
                     memset(total_mag,0,sizeof(total_mag));
                     memset(final_msg,0, sizeof(final_msg));
@@ -832,6 +887,7 @@ int main(void)
         {
             NRF_LOG_INFO("TX Mode\r\n");
             NRF_LOG_FLUSH();
+
             cc1200_cmd_strobe(CC1200_STX);
             ble_nus_string_send(&m_nus,cmd_ack,ARR_SIZE(cmd_ack));
             set_timer(time_ms);            
@@ -846,7 +902,13 @@ int main(void)
             if(timer1_flag){
                 set_timer(time_ms);
                 timer1_flag =false;
-                NRF_LOG_INFO("refresh\r\n");
+                //NRF_LOG_INFO("refresh\r\n");
+            }
+            if(chan_change){
+                chan_change = false;
+                NRF_LOG_INFO("update channel\r\n");
+                NRF_LOG_INFO("Channel number %d\r\n",channel_number);                
+                set_rf_channel(channel_number);
             }
         }
 
@@ -854,6 +916,9 @@ int main(void)
         {
             NRF_LOG_INFO("power saving mode\r\n");
             NRF_LOG_FLUSH();
+            nrf_drv_timer_disable(&TIMER_BLE);
+            cc1200_cmd_strobe(CC1200_SFTX);
+            cc1200_cmd_strobe(CC1200_SFRX);
             i = 0;
             average_mag = 0;
             memset(spimsg,0,sizeof(spimsg));
@@ -866,5 +931,3 @@ int main(void)
         }
     }
 }
-
-

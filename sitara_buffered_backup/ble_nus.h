@@ -81,9 +81,6 @@ extern "C" {
     #warning NRF_BLE_GATT_MAX_MTU_SIZE is not defined.
 #endif
 
-
-
-
 /* Forward declaration of the ble_nus_t type. */
 typedef struct ble_nus_s ble_nus_t;
 
@@ -159,7 +156,8 @@ void ble_nus_on_ble_evt(ble_nus_t * p_nus, ble_evt_t * p_ble_evt);
  */
 uint32_t ble_nus_string_send(ble_nus_t * p_nus, uint8_t * p_string, uint16_t length);
 uint32_t ble_nus_ble_params_info_send(ble_nus_t * p_nus, ble_nus_ble_params_info_t * ble_params_info);
-uint32_t ble_nus_send_data(ble_nus_t * p_nus, uint8_t * p_data, uint32_t data_length, uint32_t max_packet_length);
+// uint32_t ble_nus_send_data(ble_nus_t * p_nus, uint8_t * p_data, uint32_t data_length, uint32_t max_packet_length);
+uint32_t ble_nus_send_data(ble_nus_t * p_nus, uint8_t * p_data,uint32_t max_packet_length);
 
 #ifdef __cplusplus
 }

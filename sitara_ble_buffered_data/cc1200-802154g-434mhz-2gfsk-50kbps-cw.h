@@ -157,7 +157,7 @@ static const registerSetting_t preferredSettings[]=
 
 static const registerSetting_t preferredSettings_cw[]= 
 {
-  {CC1200_IOCFG2,            0x28}, //MAGN_VALID
+  {CC1200_IOCFG3,            0x28}, //MAGN_VALID
   {CC1200_IOCFG0,            0x06}, //PKT_SYNC_RXTX
   //{CC1200_IOCFG0,            0x28}, //MAGN_VALID
   {CC1200_SYNC3,             0x6F},

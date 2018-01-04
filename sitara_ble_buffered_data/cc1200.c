@@ -26,6 +26,8 @@
 #include "cc1200-rf-cfg.h"
 //#include "nrf_delay.h"
 #include "boards.h"
+#include <math.h>
+
 /******************************************************************************
  * Local Macro Declarations                                                    * 
  ******************************************************************************/
@@ -33,7 +35,6 @@
 // SPI for NRF
 #define SPI_INSTANCE  0 /**< SPI instance index. */
 static const nrf_drv_spi_t spi = NRF_DRV_SPI_INSTANCE(SPI_INSTANCE);
- 
 uint8_t tx_buf[128] = {0};
 uint8_t rx_buf[128] = {0};
 static volatile bool spi_xfer_done;
@@ -41,6 +42,16 @@ static volatile bool spi_xfer_done;
 void spi_event_handler(nrf_drv_spi_evt_t const * p_event, void *p_context)
 {
     spi_xfer_done = true;
+
+    // if(msg){
+    // 	msg = false;
+    // 	NRF_LOG_HEXDUMP_INFO(spimsg, 5);
+    // 	NRF_LOG_FLUSH();
+    // 	// msg = false;
+    	// ble_data_queue(transfer_msg,spimsg);
+    	// index++;
+    // }
+
   	//NRF_LOG_INFO("Transfer completed.\r\n");
 }
 
@@ -183,7 +194,6 @@ int cc1200_burst_read_register(uint16_t reg, uint8_t *data, uint8_t read_bytes)
 	uint8_t rx_len = 0;
 	memset(tx_buf, 0, sizeof(tx_buf));
 	memset(rx_buf, 0, sizeof(rx_buf));
-
 	// Reg
 	if (!CC1200_IS_EXTENDED_ADDR(reg)) {
 		tx_buf[tx_len++] = CC1200_READ_BIT | CC1200_BURST_BIT | reg;
@@ -318,10 +328,10 @@ int cc1200_init(void)
 	NRF_LOG_INFO("CC1200 Chip Number: 0x%x Chip Version: 0x%x\r\n", partnum, partver);
 	
 	// Get BURST Chip Info
-	uint8_t spimsg[10] = {0};
-	cc1200_burst_read_register(CC1200_PARTNUMBER, spimsg, 2);
-	NRF_LOG_HEXDUMP_INFO(spimsg, 2);
-	NRF_LOG_INFO("CC1200 Chip Number: 0x%x Chip Version: 0x%x\r\n", spimsg[0], spimsg[1]);
+	// uint8_t spimsg[10] = {0};
+	// cc1200_burst_read_register(CC1200_PARTNUMBER, spimsg, 2);
+	// NRF_LOG_HEXDUMP_INFO(spimsg, 2);
+	// NRF_LOG_INFO("CC1200 Chip Number: 0x%x Chip Version: 0x%x\r\n", spimsg[0], spimsg[1]);
 
 
 	NRF_LOG_FLUSH();

@@ -117,8 +117,8 @@ int cc1200_write_register(uint16_t reg, uint8_t value)
 	uint8_t ret = nrf_drv_spi_transfer(&spi, tx_buf, tx_len, rx_buf, rx_len);
 	APP_ERROR_CHECK(ret);
 	while(!spi_xfer_done){} // wait
-
-	NRF_LOG_FLUSH();
+	//NRF_LOG_INFO("updates done\r\n");	
+	//NRF_LOG_FLUSH();
 
 	return ret;
 }
