@@ -77,7 +77,7 @@ void magn_vadid_handler(nrf_drv_gpiote_pin_t pin, nrf_gpiote_polarity_t action)
 	// Disable 
 	nrf_drv_gpiote_in_event_disable(MAGN_VALID_PIN);
 	sample = true;
-	count+=1;
+	count++;
 	// Clear
 	nrf_gpiote_event_clear(NRF_GPIOTE_EVENTS_IN_0);
 	// Enable
@@ -164,7 +164,8 @@ int main(void){
 
 			sample = false;
 			cc1200_burst_read_register(CC1200_MAGN2, spimsg, 5);
-			NRF_LOG_HEXDUMP_INFO(spimsg, 5);
+			spimsg[6]++;
+			NRF_LOG_HEXDUMP_INFO(spimsg, 6);
 			NRF_LOG_FLUSH();
 		}
 		NRF_LOG_INFO("count is %d",count);
