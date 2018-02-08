@@ -152,6 +152,8 @@ int channel_number = 0;
 uint8_t spimsg[240] = {0};
 extern uint8_t sample;
 uint8_t cmd_ack[] = {'c','m','d',' ','a','c','k'};
+uint8_t testmsg[255] = {0};
+
 // int32_t magnitude;
 // int16_t angle;
 // double rss_value;
@@ -906,9 +908,10 @@ int main(void)
     err_code = nrf_drv_timer_init(&TIMER_BLE, &timer_cfg, timer_ble_event_handler);
     APP_ERROR_CHECK(err_code);
     cc1200_cmd_strobe(CC1200_SRX);
-    int count = 0;
-    uint8_t packets=0;
-    int pos = 0;
+    int ble_count = 0;
+    // int count = 0;
+    // uint8_t packets=0;
+    // int pos = 0;
     // Enter main loop.
     for (;;)
     {
@@ -919,45 +922,26 @@ int main(void)
             cc1200_cmd_strobe(CC1200_SRX);
             ble_nus_string_send(&f_nus,cmd_ack,ARR_SIZE(cmd_ack));
             set_timer(time_ms);
+            ble_count = 0;
             // packets = 0;
         }
         while(ble_spi_rx)
         {
-            // // NRF_LOG_INFO("in while\r\n");
-            // // NRF_LOG_FLUSH();
-            // if(timer1_flag){ /// Refresh
-            //     set_timer(time_ms);
-            //     timer1_flag =false;
-            // }
-            // if(chan_change){ //freq change
-            //     chan_change = false;
-            //     set_rf_channel(channel_number);
-            // }
-            //if (sample)
-            // NRF_LOG_INFO("In main1\r\n");
-            // NRF_LOG_FLUSH();
-            // if(sample){
-                // NRF_LOG_INFO("In main\r\n");
-                // NRF_LOG_FLUSH();
-            if(sample)
-                {
+            for (int i = 0; i < 240; i+=5){ 
+                if(sample){
                     sample = false;
-                    cc1200_burst_read_register(CC1200_MAGN2,&spimsg[pos],5);
-                    NRF_LOG_HEXDUMP_INFO(&spimsg[pos],5);  
-                    NRF_LOG_FLUSH();              
+                           // TODO: fix the following line to read long spimsg
+                   cc1200_burst_read_register(CC1200_MAGN2, spimsg, 5);
+                // spi_count++;
+                    for (int j = 0; j < 5; j++)
+                        testmsg[i+j] = spimsg[j];
+            //  while(sample == false);
                 }
-                pos +=5;
-                if (packets == 0){
-                    packets++;
-                    ble_nus_send_data(&f_nus,spimsg,5);
-                }
-                if (pos == 240){
-                    pos = 0;
-                    packets=0;
-                }
-                count++;
-            // }
-            //}    
+            }
+            //}
+            err_code = ble_nus_string_send(&f_nus,testmsg,240); // BLE_NUS_MAX_DATA_LEN is 155?
+            if(err_code == NRF_SUCCESS)
+            ble_count++;
             //ble_data_queue(&transfer_msg[0]);
         //packets++;
             // ble_data_queue(&transfer_msg[packet_index*20]);
@@ -994,11 +978,10 @@ int main(void)
             NRF_LOG_INFO("power saving mode\r\n");
             NRF_LOG_FLUSH();
             nrf_drv_timer_disable(&TIMER_BLE);
+            NRF_LOG_INFO("ble count is %d", ble_count);
             cc1200_cmd_strobe(CC1200_SFTX);
             cc1200_cmd_strobe(CC1200_SFRX);
-            NRF_LOG_INFO("count is %d\r\n",count);
             NRF_LOG_FLUSH();
-            count = 0;
         }
         while(!ble_spi_rx && !ble_spi_tx)
         {
