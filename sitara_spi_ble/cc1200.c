@@ -181,8 +181,8 @@ int cc1200_burst_read_register(uint16_t reg, uint8_t *data, uint8_t read_bytes)
 {
 	uint8_t tx_len = 0;
 	uint8_t rx_len = 0;
-	memset(tx_buf, 0, sizeof(tx_buf));
-	memset(rx_buf, 0, sizeof(rx_buf));
+	// memset(tx_buf, 0, sizeof(tx_buf));
+	// memset(rx_buf, 0, sizeof(rx_buf));
 
 	// Reg
 	if (!CC1200_IS_EXTENDED_ADDR(reg)) {
@@ -204,7 +204,6 @@ int cc1200_burst_read_register(uint16_t reg, uint8_t *data, uint8_t read_bytes)
 	
 	// NRF_LOG_INFO("Received");
 	// NRF_LOG_HEXDUMP_INFO(rx_buf, rx_len);
-
 	// NRF_LOG_FLUSH();
 
 	if(ret < 0)
@@ -217,7 +216,8 @@ int cc1200_burst_read_register(uint16_t reg, uint8_t *data, uint8_t read_bytes)
 			data[j-2] = rx_buf[j];
 		}
 	}
-
+	// NRF_LOG_HEXDUMP_INFO(data,5);
+	// NRF_LOG_FLUSH();
 	// send the SPI message (all of the above fields, inc. buffers)
 	return ret;
 }

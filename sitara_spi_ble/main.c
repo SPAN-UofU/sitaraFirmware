@@ -59,7 +59,7 @@
 /* Defines and register set */
 #include "cc1200-const.h"
 #include "cc1200-rf-cfg.h"
-#include "cc1200-802154g-434mhz-2gfsk-50kbps-cw.h"
+#include "cc1200-802154g-868mhz-2gfsk-50kbps-cw.h"
 #include "cc1200.h"
 
 #include "nrf_drv_spi.h"
@@ -107,6 +107,7 @@
 #define NEXT_CONN_PARAMS_UPDATE_DELAY   APP_TIMER_TICKS(30000)                      /**< Time between each call to sd_ble_gap_conn_param_update after the first call (30 seconds). */
 #define MAX_CONN_PARAMS_UPDATE_COUNT    3                                           /**< Number of attempts before giving up the connection parameter negotiation. */
 #define DEAD_BEEF                       0xDEADBEEF                                  /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
+#define DEBUG               1  //turns on debug
 
 static ble_nus_t                        m_nus;                                      /**< Structure to identify the Nordic UART Service. */
 static uint16_t                         m_conn_handle = BLE_CONN_HANDLE_INVALID;    /**< Handle of the current connection. */
@@ -123,13 +124,16 @@ static uint16_t                         m_ble_nus_max_data_len = BLE_GATT_ATT_MT
 /* Import the rf configuration set by CC1200_RF_CFG */
 
 extern const cc1200_rf_cfg_t CC1200_RF_CFG;
-#define CC1200_RF_CFG cc1200_802154g_434mhz_2gfsk_50kbps_cw
+#define CC1200_RF_CFG cc1200_802154g_868mhz_2gfsk_50kbps_cw
 
 static volatile bool ble_spi_rx;
 static volatile bool ble_spi_tx;
 uint8_t spimsg[10] = {0};
+// uint8_t testmsg[255] = "255-replace-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-end";
+uint8_t testmsg[255] = {0};
 uint8_t sample = false;
-
+uint16_t spi_count = 0;
+uint16_t ble_count = 0; 
 uint8_t cmd_ack[] = {'c','m','d',' ','a','c','k'};
 
 /**@brief Function for assert macro callback.
@@ -147,8 +151,6 @@ void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
 {
     app_error_handler(DEAD_BEEF, line_num, p_file_name);
 }
-
-
 /**@brief Function for the GAP initialization.
  *
  * @details This function will set up all the necessary GAP (Generic Access Profile) parameters of
@@ -196,6 +198,8 @@ static void nus_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t lengt
     {
         ble_spi_rx = true;
         ble_spi_tx = false;
+    spi_count = 0;
+    ble_count = 0;
         //cc1200_cmd_strobe(CC1200_SRX);
         //cc1200_cmd_strobe(CC1200_SFTX);
     }
@@ -211,6 +215,7 @@ static void nus_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t lengt
     {
         ble_spi_rx = false;
         ble_spi_tx = false;
+
     }
 
 }
@@ -719,19 +724,40 @@ int main(void)
             if(sample)
             {
                 sample = false;
-                cc1200_burst_read_register(CC1200_MAGN2, spimsg, 5);
-                NRF_LOG_HEXDUMP_INFO(spimsg, 5);
-                NRF_LOG_FLUSH();
-                nrf_delay_ms(7);
-                do
-                {
-                    err_code = ble_nus_string_send(&m_nus,spimsg,5);
-                    if ( (err_code != NRF_SUCCESS) && (err_code != NRF_ERROR_BUSY) )
-                    {
-                        APP_ERROR_CHECK(err_code);
-                    }
-                } while (err_code == NRF_ERROR_BUSY);
+        
+                //NRF_LOG_HEXDUMP_INFO(spimsg, 5);
+                //NRF_LOG_FLUSH();
+                //nrf_delay_ms(10);
+            //int count = 0;         
+        for (int i = 0; i < 250; i+=5)
+        {   // TODO: fix the following line to read long spimsg
+                    cc1200_burst_read_register(CC1200_MAGN2, spimsg, 5);
+                   
+            // spi_count++;
+            for (int j = 0; j < 5; j++)
+                testmsg[i+j] = spimsg[j];
+        //  while(sample == false);
+        }
+        // do
+        //         {
+            // can't get this to work at 255 chars yet
+                    err_code = ble_nus_string_send(&m_nus,testmsg,155); // BLE_NUS_MAX_DATA_LEN is 155?
+        //     if(err_code == NRF_SUCCESS)
+        //     ble_count++;
+        //    // if (err_code != NRF_SUCCESS)
+        // //  NRF_LOG_INFO("Error code: %d",err_c1de);
+        // //    count++;  
+        //             if ( (err_code != NRF_SUCCESS) && (err_code != NRF_ERROR_BUSY) )
+        //             {
+        //     //NRF_LOG_INFO("Error code: %d",err_code);
 
+        //                 APP_ERROR_CHECK(err_code);
+        //             }
+
+        //     //nrf_delay_ms(7);
+        //         } while (err_code == NRF_ERROR_BUSY);
+        //NRF_LOG_INFO("transmitted: %d bytes",count*155);  
+        //NRF_LOG_FLUSH();
             }
         }
         if(ble_spi_tx)
@@ -745,7 +771,10 @@ int main(void)
 
         if(!ble_spi_rx && !ble_spi_tx)
         {
-            NRF_LOG_INFO("power saving mode\r\n");
+            NRF_LOG_INFO("spi_count is: %d\n",spi_count);
+        NRF_LOG_INFO("ble_count is: %d\n",ble_count);
+        NRF_LOG_INFO("sample is: %d\n",sample);
+        NRF_LOG_INFO("power saving mode\r\n");
             NRF_LOG_FLUSH();
         }
         while(!ble_spi_rx && !ble_spi_tx)
@@ -754,5 +783,4 @@ int main(void)
         }
     }
 }
-
 

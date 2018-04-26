@@ -80,6 +80,7 @@
 #endif
 // </h> 
 
+
 // <e> GPIOTE_ENABLED - nrf_drv_gpiote - GPIOTE peripheral driver
 #ifndef GPIOTE_ENABLED
 #define GPIOTE_ENABLED 1
