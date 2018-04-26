@@ -1,0 +1,2 @@
+JLinkRTTLogger -device nrf52840_xxaa -if SWD -speed 4000 -RTTChannel 0 /dev/stdout
+

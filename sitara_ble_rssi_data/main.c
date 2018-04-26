@@ -58,7 +58,7 @@
 /* Defines and register set */
 #include "cc1200-const.h"
 #include "cc1200-rf-cfg.h"
-#include "cc1200-802154g-434mhz-2gfsk-50kbps-cw.h"
+#include "cc1200-802154g-868mhz-2gfsk-50kbps-cw.h"
 #include "cc1200.h"
 #include "nrf_drv_spi.h"
 #include "nordic_common.h"
@@ -83,7 +83,7 @@
 #include "nrf_drv_gpiote.h"
 #include <math.h>
 #include "nrf_drv_timer.h"
-
+#include "app_util_bds.h"
 #define NRF_LOG_MODULE_NAME "APP"
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
@@ -92,7 +92,7 @@
 
 #define APP_FEATURE_NOT_SUPPORTED       BLE_GATT_STATUS_ATTERR_APP_BEGIN + 2        /**< Reply when unsupported features are requested. */
 
-#define DEVICE_NAME                     "Nordic_8"                               /**< Name of device. Will be included in the advertising data. */
+#define DEVICE_NAME                     "Nordic_4"                               /**< Name of device. Will be included in the advertising data. */
 #define NUS_SERVICE_UUID_TYPE           BLE_UUID_TYPE_VENDOR_BEGIN                  /**< UUID type for the Nordic UART Service (vendor specific). */
 
 #define APP_ADV_INTERVAL                64                                          /**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
@@ -122,9 +122,9 @@ static ble_nus_ble_params_info_t        m_ble_params_info = {20, 50, 1, 1};
 
 
 #define ARR_SIZE(a) (sizeof(a) / sizeof((a)[0]))
-#define MAGN_VALID_PIN NRF_GPIO_PIN_MAP(0,2)
+#define MAGN_VALID_PIN NRF_GPIO_PIN_MAP(1,15)
 #define CHECK_BIT(var,pos) ((var) & (1<<(pos)))
-#define SIZE 240
+#define SAMPLE 20000                                                                                        
 #define FREQ_DIVIDER 1000
 #define FREQ_MULTIPLIER 6826.67
 
@@ -134,32 +134,30 @@ static ble_nus_ble_params_info_t        m_ble_params_info = {20, 50, 1, 1};
 /* Import the rf configuration set by CC1200_RF_CFG */
 
 extern const cc1200_rf_cfg_t CC1200_RF_CFG;
-#define CC1200_RF_CFG cc1200_802154g_434mhz_2gfsk_50kbps_cw
+#define CC1200_RF_CFG cc1200_802154g_868mhz_2gfsk_50kbps_cw
 const nrf_drv_timer_t TIMER_BLE = NRF_DRV_TIMER_INSTANCE(1);
 uint32_t time_ms = 180000; //Time(in miliseconds) between consecutive compare events.
 //uint32_t time_ms = 50000;
 const nrf_drv_timer_t Counter_1 = NRF_DRV_TIMER_INSTANCE(2);
-
 // static volatile bool ble_spi_rx = false;
 uint8_t ble_spi_rx = false;
 static volatile bool ble_spi_tx = false;
 static volatile bool timer1_flag = false;
 static volatile bool chan_updated = false;
 static volatile bool chan_change = false;
-uint8_t transfer_msg[20] = {0};
-// int packet_index = 0;
 int channel_number = 0;
-uint8_t spimsg[5] = {0};
-uint8_t testmsg[5] = {0};
+uint8_t spimsg[10] = {0};
 uint8_t sample = false;
-extern uint8_t msg;
 uint8_t cmd_ack[] = {'c','m','d',' ','a','c','k'};
-int32_t magnitude;
-int16_t angle;
-long rss_value = 0;
-double power_dbm;
+uint8_t testmsg[SAMPLE] = {0};
 int pos,index;
 int temp = 0;
+int32_t magnitude;
+uint8_t agc_gain[3]= {0};
+// int16_t angle;
+float rss_value;
+float total_mag;
+uint8_t final_msg[240] = {0};
 static int frequency_calc(int channel){
     uint32_t frequency;
     frequency = CC1200_RF_CFG.chan_center_freq0 + (channel * CC1200_RF_CFG.chan_spacing);
@@ -245,7 +243,7 @@ static void gap_params_init(void)
 /**@snippet [Handling the data received over BLE] */
 static void nus_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t length)
 {
-    NRF_LOG_HEXDUMP_INFO(p_data, length);
+    //NRF_LOG_HEXDUMP_INFO(p_data, length);
     if(p_data[0] == '1' && p_data[1] == '1')
     {
         ble_spi_rx = false;
@@ -631,7 +629,7 @@ void gatt_init(void)
     err_code = nrf_ble_gatt_init(&m_gatt, gatt_evt_handler);
     APP_ERROR_CHECK(err_code);
 
-    err_code = nrf_ble_gatt_att_mtu_periph_set(&m_gatt, 64);
+    err_code = nrf_ble_gatt_att_mtu_periph_set(&m_gatt, 247);
     APP_ERROR_CHECK(err_code);
 }
 
@@ -829,40 +827,57 @@ static void gatt_mtu_set(uint16_t att_mtu)
     APP_ERROR_CHECK(err_code);
 }
 
-static int ble_data_queue(uint8_t *final_msg,uint8_t *spimsg,int j){
-    // NRF_LOG_HEXDUMP_INFO(spimsg, 5);
-    // NRF_LOG_FLUSH();
-        magnitude = ((spimsg[0]<<16)&0xFF0000) + ((spimsg[1]<<8)&0x00FF00) + (spimsg[2]&0x0000FF);
-        //angle = ((spimsg[3]<<8)&0xFF00) + ((spimsg[4])&0x00FF);
-        rss_value +=  pow(magnitude,2);
+// static int ble_data_queue(uint8_t *final_msg,uint8_t *test,int j){
+//     // NRF_LOG_HEXDUMP_INFO(spimsg, 5);
+//     // NRF_LOG_FLUSH();
+      // NRF_LOG_HEXDUMP_INFO(test,5);
+      // NRF_LOG_FLUSH();
+//         magnitude = ((test[0]<<16)&0xFF0000) + ((test[1]<<8)&0x00FF00) + (test[2]&0x0000FF);
+//         //angle = ((spimsg[3]<<8)&0xFF00) + ((spimsg[4])&0x00FF);
+//         rss_value +=  pow(magnitude,2);
 
-    if(temp==100){
-        power_dbm = -1*((10*log10(rss_value)) - 131.7815 + 30);
-        final_msg[j] = power_dbm;
-        j++;
-        temp = 0;
+//     if(temp==100){
+//         power_dbm = ((10*log10(rss_value)) - 131.7815 + 30);
+//         final_msg[j] = power_dbm;
+//         j++;
+//         temp = 0;
 
-        // NRF_LOG_INFO("in if\r\n");
-        // ble_nus_string_send(&f_nus,&final_msg[0],1);
-        // NRF_LOG_HEXDUMP_INFO(final_msg,1);
-        // NRF_LOG_FLUSH();
-        // nrf_delay_ms(100);
+//         // NRF_LOG_INFO("in if\r\n");
+//         // ble_nus_string_send(&f_nus,&final_msg[0],1);
+//         // NRF_LOG_HEXDUMP_INFO(final_msg,1);
+//         // NRF_LOG_FLUSH();
+//         // nrf_delay_ms(100);
 
-        rss_value = 0;
-        return j;
-    }
-    temp+=1;
-    return j;
-}
+//         rss_value = 0;
+//         return j;
+//     }
+//     temp+=1;
+//     return j;
+// }
 /**@brief Application main function.
  */
+
+static __INLINE uint8_t bds_float_encode(const float_t * p_value, uint8_t * p_encoded_data){
+    union { 
+        float float_val;
+        uint8_t char_val[4];
+    }encoder;
+
+    encoder.float_val = *p_value;
+    p_encoded_data[0] = encoder.char_val[0];
+    p_encoded_data[1] = encoder.char_val[1];
+    p_encoded_data[2] = encoder.char_val[2];
+    p_encoded_data[3] = encoder.char_val[3];
+    return(4);
+}
+
 int main(void)
 {
     uint32_t err_code;
     bool erase_bonds;
     ble_gap_phys_t gap_phys_settings;    
-
     cc1200_init(); // Initialize cc1200
+
     gpio_init();
     // Initialize.
     err_code = app_timer_init();
@@ -893,53 +908,96 @@ int main(void)
     err_code = nrf_drv_timer_init(&TIMER_BLE, &timer_cfg, timer_ble_event_handler);
     APP_ERROR_CHECK(err_code);
     cc1200_cmd_strobe(CC1200_SRX);
-    // int count = 0;
+    // int ble_count = 0;
+    int count;
+    uint8_t packet;
+    // int pos = 0;
     // Enter main loop.
     for (;;)
     {
         if(ble_spi_rx)
         {
-
+            // NRF_LOG_INFO("RX Mode\r\n");
+            // NRF_LOG_FLUSH();
+            // cc1200_init(); // Initialize cc1200
             cc1200_cmd_strobe(CC1200_SRX);
+            // cc1200_cmd_strobe(CC1200_SFTX);
             ble_nus_string_send(&f_nus,cmd_ack,ARR_SIZE(cmd_ack));
             set_timer(time_ms);
-            pos = 0;
-            index = 0;
+            // ble_count = 0;
+            rss_value = 0;
+            count = 0;
         }
         while(ble_spi_rx)
         {
             if(timer1_flag){
-                set_timer(time_ms);
-                timer1_flag =false;
+            set_timer(time_ms);
+            timer1_flag =false;
                 //NRF_LOG_INFO("refresh\r\n");
             }
-            if(chan_change){
-                chan_change = false;
-                set_rf_channel(channel_number);
-            }
-            for(uint16_t i = 0;i<=24000;i++)      
-            {    if(sample)
-                {
+            packet = 0;
+            for (uint32_t i=0;i<SAMPLE;i+=3){ 
+                if(sample){
                     sample = false;
-                    cc1200_burst_read_register(CC1200_MAGN2, spimsg, 5);
-                    for(int j=0;j<5;j++)
-                        {testmsg[j] = spimsg[j];}
-                    pos = ble_data_queue(transfer_msg,testmsg,pos);
+                    cc1200_burst_read_register(CC1200_MAGN2,spimsg,3);
+                // spi_count++;
+                    // for (int j = 0;j<3;j++)
+                    //     testmsg[i+j] = spimsg[j];
+                    memcpy(&testmsg[i],spimsg,3);
+                    // pos = ble_data_queue(transfer_msg,testmsg,pos);
+                    magnitude = ((testmsg[i]<<16)&0xFF0000) + ((testmsg[i+1]<<8)&0x00FF00) + (testmsg[i+2]&0x0000FF);
+                    total_mag +=  pow(magnitude,2);
+                    count++;
+                    if(count==100)
+                    {
+                        count = 0;
+                        rss_value = ((10*log10(total_mag/100)) + 30);
+                        NRF_LOG_INFO(NRF_LOG_FLOAT_MARKER "\r\n", NRF_LOG_FLOAT(rss_value));
+                        NRF_LOG_FLUSH();
+                        final_msg[packet] = rss_value;
+                        final_msg[packet+1] = (rss_value*100) - (final_msg[packet]*100);
 
+                        // cc1200_burst_read_register(CC1200_AGC_GAIN3,agc_gain,3);
+                        // NRF_LOG_HEXDUMP_INFO(agc_gain,3);
+                        // // NRF_LOG_INFO("AGC GAIN is " NRF_LOG_FLOAT_MARKER "\r\n", NRF_LOG_FLOAT(agc_gain[0]));;
+                        // NRF_LOG_FLUSH();
+                        // rss_value = -1*((10*log10(total_mag)) - 131.7815 + 30);
+                        // final_msg[packet] = (rss_value >> 24) & 0x000000FF;
+                        // final_msg[packet+1] = (rss_value >> 16) & 0x000000FF;
+                        // final_msg[packet+2] = (rss_value >> 8) & 0x000000FF;
+                        // final_msg[packet+3] = (rss_value >> 0) & 0x000000FF;
+                        // final_msg[packet] = rss_value;
+                        packet+=2;
+                        total_mag = 0;
+                    }
+            //  while(sample == false);
                 }
             }
-            err_code = ble_nus_string_send(&f_nus,transfer_msg,240);
-            pos = 0;
+            err_code = ble_nus_string_send(&f_nus,final_msg,134);
+            // NRF_LOG_INFO("Done\r\n");
+            // NRF_LOG_FLUSH();
+            // nrf_delay_ms(1000);
+            // if(err_code == NRF_SUCCESS)
+            //     ble_count++;
+            //ble_data_queue(&transfer_msg[0]);
+        //packets++;
+            // ble_data_queue(&transfer_msg[packet_index*20]);
+            // packet_index++;
+            // if(packet_index == SIZE/20){
+            //     err_code = ble_nus_send_data(&f_nus,transfer_msg,SIZE,240);
+            //     //nrf_delay_ms(1000);
+            //     packet_index = 0;
+            // }
         }
         if(ble_spi_tx)
         {
-            NRF_LOG_INFO("TX Mode\r\n");
-            NRF_LOG_FLUSH();
-
+            // NRF_LOG_INFO("TX Mode\r\n");
+            // NRF_LOG_FLUSH();
+            // cc1200_init(); // Initialize cc1200
             cc1200_cmd_strobe(CC1200_STX);
+            // cc1200_cmd_strobe(CC1200_SFRX);
             ble_nus_string_send(&f_nus,cmd_ack,ARR_SIZE(cmd_ack));
             set_timer(time_ms);            
-
         }
         while(ble_spi_tx){                       
             if(timer1_flag){
@@ -954,18 +1012,27 @@ int main(void)
                 set_rf_channel(channel_number);
             }
         }
-
         if(!ble_spi_rx && !ble_spi_tx)
         {
-            NRF_LOG_INFO("power saving mode\r\n");
-            NRF_LOG_FLUSH();
+            // cc1200_cmd_strobe(CC1200_SFTX);
+            // cc1200_cmd_strobe(CC1200_SFRX);
+            // cc1200_cmd_strobe(CC1200_SRES);
+            // cc1200_init(); // Initialize cc1200
+            cc1200_cmd_strobe(CC1200_SIDLE);
+            // ble_nus_string_send(&f_nus,cmd_ack,ARR_SIZE(cmd_ack));
+            // NRF_LOG_INFO("power saving mode\r\n");
+            // NRF_LOG_INFO("ble count is %d\r\n", ble_count);
+            // NRF_LOG_FLUSH();
             nrf_drv_timer_disable(&TIMER_BLE);
-            cc1200_cmd_strobe(CC1200_SFTX);
-            cc1200_cmd_strobe(CC1200_SFRX);
+
+            // NRF_LOG_FLUSH();
         }
         while(!ble_spi_rx && !ble_spi_tx)
         {
             power_manage();
+
         }
     }
 }
+
+
