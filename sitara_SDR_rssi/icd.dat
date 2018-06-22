@@ -1,0 +1,51 @@
+/*			Sitara_SDR Interface Control Document - v0.1                              
+
+
+-Available bluetooth serial string commands; s[0] refers to first character/command 
+s[1]..s[n] refer to subsequent characters/arguments/data for the command. 
+-All commands and arguments are sent as ascii chars (case sensitive unless otherwise noted)
+-Once a command is received, device will respond with "cmd_ack" and optionally a descriptive message
+
+'x' or 'q' = APP_CMD_STOP
+	arguments: none
+	usage: disable measurement, receive mode and/or clock
+	note: previously equivalent to "0"
+	
+'a' = APP_CMD_ACCESS_REGISTER
+	arguments: s[1] = 'r' or 'w', s[2:5] register address, s[6:7] value to set (optional)
+	function: read or write arbitrary register of CC1200 chip
+	usage: sending "aw2f0c56" writes 0x56 to register 0x2F0C - note this uses extended
+		 register space (prefixed with 0x2F), standard registers are addressed 0x000C
+	note: register address and values not case sensitive, but s[0] and s[1] are.
+
+'m' = APP_CMD_START_MEASUREMENT
+	arguments: s[1] = 'm', 'd', 'c' or 'p' referring to mag/angl, RSSI direct, RSSI calculated or phase
+	usage: sending "mm" will begin "measurement magnitude/angle" stream mode
+	note: previously equivalent to "11"
+
+'f' = APP_CMD_CHANGE_FREQ
+	arguments: s[1:3] = integer values representing the new frequency in MHz
+	usage: sending "f910" tunes radio to 910 MHz
+	TODO: maybe include an argument that sets channel number?
+
+'p' = APP_CMD_CHANGE_PHY
+	arguments: s[1] (optional) = 1 or 2
+	usage: sending "p1" sets phy to 1mbps (default), no argument toggles between the two
+	
+'t' = APP_CMD_TRANSMIT
+	arguments: s[1:n] = characters to transmit
+	usage: sending "thello" will transmit the string "hello"
+	note: string length limited to TBD, TODO: add continuous transmit mode (previously "01")
+
+'r' = APP_CMD_RECEIVE
+	arguments: none
+	usage: sending "r" sets receive mode, to receive data from device sent from another device in TRANSMIT mode
+
+'X' = APP_CMD_RESET
+	arguments: none
+	usage: sending "X" (only upper case) will disconnect bluetooth and reset the device
+
+'c' = APP_CMD_CLOCK
+	arguments: s[1] = 'z', 'c' clock zero (reset or start) or capture high-frequency clock
+	usage: sending "cc" will send the current number of (16 MHz) clock ticks
+*/
